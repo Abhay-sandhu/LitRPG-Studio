@@ -1,0 +1,91 @@
+@import "tailwindcss";
+
+@layer base {
+  body {
+    @apply bg-slate-950 text-slate-100 antialiased font-sans m-0 p-0 overflow-hidden;
+  }
+}
+
+/* TipTap Editor Styles */
+.tiptap {
+  outline: none;
+  min-height: calc(100vh - 180px);
+}
+
+.tiptap p {
+  line-height: 1.8;
+  margin-bottom: 1.25rem;
+  font-size: 1.125rem;
+}
+
+.tiptap h1 {
+  font-size: 2.25rem;
+  font-weight: 700;
+  margin-top: 2rem;
+  margin-bottom: 1rem;
+  color: #f8fafc;
+  letter-spacing: -0.025em;
+}
+
+.tiptap h2 {
+  font-size: 1.75rem;
+  font-weight: 600;
+  margin-top: 1.5rem;
+  margin-bottom: 0.75rem;
+  color: #e2e8f0;
+}
+
+.tiptap h3 {
+  font-size: 1.35rem;
+  font-weight: 600;
+  margin-top: 1.25rem;
+  margin-bottom: 0.5rem;
+  color: #cbd5e1;
+}
+
+.tiptap ul {
+  list-style-type: disc;
+  padding-left: 1.5rem;
+  margin-bottom: 1.25rem;
+}
+
+.tiptap ol {
+  list-style-type: decimal;
+  padding-left: 1.5rem;
+  margin-bottom: 1.25rem;
+}
+
+.tiptap li {
+  margin-bottom: 0.35rem;
+}
+
+/* LitRPG System / Blue Box Styling */
+.tiptap blockquote {
+  border-left: 4px solid #38bdf8;
+  background: linear-gradient(135deg, rgba(14, 165, 233, 0.12) 0%, rgba(2, 132, 199, 0.04) 100%);
+  border-radius: 0.5rem;
+  padding: 1rem 1.25rem;
+  margin: 1.5rem 0;
+  color: #7dd3fc;
+  box-shadow: 0 0 15px rgba(56, 189, 248, 0.15), inset 0 0 15px rgba(56, 189, 248, 0.05);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+}
+
+.tiptap blockquote p {
+  margin-bottom: 0.5rem;
+  font-size: 0.95rem;
+}
+
+.tiptap blockquote p:last-child {
+  margin-bottom: 0;
+}
+
+/* Placeholder extension styling */
+.tiptap p.is-editor-empty:first-child::before {
+  color: #475569;
+  content: attr(data-placeholder);
+  float: left;
+  height: 0;
+  pointer-events: none;
+}
+
