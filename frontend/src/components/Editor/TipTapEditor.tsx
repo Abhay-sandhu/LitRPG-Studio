@@ -3,6 +3,9 @@ import { useEditor, EditorContent } from '@tiptap/react'
 import StarterKit from '@tiptap/starter-kit'
 import Placeholder from '@tiptap/extension-placeholder'
 import CharacterCount from '@tiptap/extension-character-count'
+import Underline from '@tiptap/extension-underline'
+import TextAlign from '@tiptap/extension-text-align'
+import Highlight from '@tiptap/extension-highlight'
 import { EditorToolbar } from './EditorToolbar'
 
 interface TipTapEditorProps {
@@ -14,17 +17,17 @@ const INITIAL_LITRPG_CONTENT = `
 <h2>Chapter 1: The Crypt of the Fallen King</h2>
 <p>The damp stone walls of the lower catacombs dripped with stagnant water. Ethan tightened his grip on the cracked hilt of his shortsword, his knuckles white in the gloom. His breath plumed in the freezing subterranean air.</p>
 
-<blockquote>
+<blockquote style="text-align: center">
   <p><strong>[SYSTEM ANNOUNCEMENT]</strong></p>
-  <p>You have entered: <em>The Sunken Catacombs (Floor 1)</em>.</p>
+  <p>You have entered: <mark>The Sunken Catacombs (Floor 1)</mark>.</p>
   <p>Level Requirement: 1-5 | Hazard Level: Low</p>
 </blockquote>
 
 <p>Ahead, pair after pair of glowing crimson eyes ignited in the darkness. The skeletal sentinels rattled as they drew rusted iron blades from the earthen floor. Ethan took a slow, measured step forward, feeling the hum of mana dormant within his veins.</p>
 
-<blockquote>
+<blockquote style="text-align: center">
   <p><strong>[COMBAT ENGAGED]</strong></p>
-  <p>Enemy Detected: Skeletal Sentinel (Level 2)</p>
+  <p>Enemy Detected: <u>Skeletal Sentinel</u> (Level 2)</p>
   <p>Warning: Blunt physical resistance +15%.</p>
 </blockquote>
 
@@ -51,6 +54,13 @@ export const TipTapEditor: React.FC<TipTapEditorProps> = ({
         placeholder: 'Write your story here or insert a [System Box]...',
       }),
       CharacterCount,
+      Underline,
+      TextAlign.configure({
+        types: ['heading', 'paragraph', 'blockquote'],
+      }),
+      Highlight.configure({
+        multicolor: true,
+      }),
     ],
     content: INITIAL_LITRPG_CONTENT,
     onUpdate: ({ editor }) => {
@@ -72,7 +82,7 @@ export const TipTapEditor: React.FC<TipTapEditorProps> = ({
   }, [editor, onWordCountChange])
 
   return (
-    <div className="flex-1 flex flex-col h-full bg-slate-950 overflow-hidden">
+    <div className="flex-1 flex flex-col h-full bg-white dark:bg-slate-950 overflow-hidden transition-colors">
       <EditorToolbar editor={editor} />
       <div className="flex-1 overflow-y-auto px-8 py-8 md:px-16 lg:px-24">
         <div className="max-w-3xl mx-auto">

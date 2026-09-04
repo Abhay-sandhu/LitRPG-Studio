@@ -25,12 +25,12 @@ export const EditorToolbar: React.FC<EditorToolbarProps> = ({ editor }) => {
   const buttonClass = (isActive: boolean) =>
     `p-1.5 rounded transition-colors ${
       isActive
-        ? 'bg-sky-500/20 text-sky-400 border border-sky-500/40'
-        : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800'
+        ? 'bg-sky-50 dark:bg-sky-500/20 text-sky-700 dark:text-sky-400 border border-sky-200 dark:border-sky-500/40 shadow-sm'
+        : 'text-slate-500 dark:text-slate-400 hover:text-slate-900 hover:bg-slate-100 dark:hover:text-slate-200 dark:hover:bg-slate-800'
     }`
 
   return (
-    <div className="sticky top-0 z-10 flex items-center gap-1 border-b border-slate-800/80 bg-slate-900/90 backdrop-blur px-6 py-2">
+    <div className="sticky top-0 z-10 flex items-center gap-1 border-b border-slate-200 dark:border-slate-800/80 bg-white/90 dark:bg-slate-900/90 backdrop-blur px-6 py-2 transition-colors">
       <button
         type="button"
         onClick={() => editor.chain().focus().toggleBold().run()}
@@ -56,7 +56,7 @@ export const EditorToolbar: React.FC<EditorToolbarProps> = ({ editor }) => {
         <Strikethrough className="w-4 h-4" />
       </button>
 
-      <div className="h-4 w-[1px] bg-slate-800 mx-1" />
+      <div className="h-4 w-[1px] bg-slate-200 dark:bg-slate-800 mx-1" />
 
       <button
         type="button"
@@ -83,7 +83,7 @@ export const EditorToolbar: React.FC<EditorToolbarProps> = ({ editor }) => {
         <Heading3 className="w-4 h-4" />
       </button>
 
-      <div className="h-4 w-[1px] bg-slate-800 mx-1" />
+      <div className="h-4 w-[1px] bg-slate-200 dark:bg-slate-800 mx-1" />
 
       <button
         type="button"
@@ -102,7 +102,7 @@ export const EditorToolbar: React.FC<EditorToolbarProps> = ({ editor }) => {
         <ListOrdered className="w-4 h-4" />
       </button>
 
-      <div className="h-4 w-[1px] bg-slate-800 mx-1" />
+      <div className="h-4 w-[1px] bg-slate-200 dark:bg-slate-800 mx-1" />
 
       {/* LitRPG Blue Box / System Notification Button */}
       <button
@@ -110,8 +110,8 @@ export const EditorToolbar: React.FC<EditorToolbarProps> = ({ editor }) => {
         onClick={() => editor.chain().focus().toggleBlockquote().run()}
         className={`flex items-center gap-1.5 px-2.5 py-1 rounded text-xs font-mono transition-colors ${
           editor.isActive('blockquote')
-            ? 'bg-sky-500/30 text-sky-300 border border-sky-400'
-            : 'bg-sky-950/40 text-sky-400 hover:bg-sky-900/50 border border-sky-800/60'
+            ? 'bg-sky-100 dark:bg-sky-500/30 text-sky-800 dark:text-sky-300 border border-sky-300 dark:border-sky-400 shadow-sm'
+            : 'bg-slate-50 dark:bg-sky-950/40 text-sky-700 dark:text-sky-400 hover:bg-slate-100 dark:hover:bg-sky-900/50 border border-slate-200 dark:border-sky-800/60'
         }`}
         title="Insert or toggle LitRPG System Box"
       >
@@ -133,7 +133,7 @@ export const EditorToolbar: React.FC<EditorToolbarProps> = ({ editor }) => {
           type="button"
           onClick={() => editor.chain().focus().undo().run()}
           disabled={!editor.can().undo()}
-          className="p-1.5 rounded text-slate-400 hover:text-slate-200 disabled:opacity-30"
+          className="p-1.5 rounded text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 disabled:opacity-30 transition-colors"
           title="Undo (Ctrl+Z)"
         >
           <Undo2 className="w-4 h-4" />
@@ -142,7 +142,7 @@ export const EditorToolbar: React.FC<EditorToolbarProps> = ({ editor }) => {
           type="button"
           onClick={() => editor.chain().focus().redo().run()}
           disabled={!editor.can().redo()}
-          className="p-1.5 rounded text-slate-400 hover:text-slate-200 disabled:opacity-30"
+          className="p-1.5 rounded text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 disabled:opacity-30 transition-colors"
           title="Redo (Ctrl+Y)"
         >
           <Redo2 className="w-4 h-4" />
