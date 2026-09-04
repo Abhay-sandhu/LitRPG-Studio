@@ -1,5 +1,5 @@
 import React from 'react'
-import { BookOpen, Sparkles, CheckCircle2, Moon, Sun } from 'lucide-react'
+import { BookOpen, Sparkles, CheckCircle2, Moon, Sun, Menu } from 'lucide-react'
 
 interface NavbarProps {
   wordCount: number
@@ -7,12 +7,20 @@ interface NavbarProps {
   isAnalyzing: boolean
   isDarkMode: boolean
   onToggleTheme: () => void
+  onOpenNav: () => void
 }
 
-export const Navbar: React.FC<NavbarProps> = ({ wordCount, chapterTitle, isAnalyzing, isDarkMode, onToggleTheme }) => {
+export const Navbar: React.FC<NavbarProps> = ({ wordCount, chapterTitle, isAnalyzing, isDarkMode, onToggleTheme, onOpenNav }) => {
   return (
     <header className="h-14 border-b border-slate-200 dark:border-slate-800 bg-white/90 dark:bg-slate-900/90 backdrop-blur px-4 flex items-center justify-between select-none z-10 transition-colors">
       <div className="flex items-center space-x-3">
+        <button
+          onClick={onOpenNav}
+          className="p-1.5 -ml-1.5 rounded-md text-slate-500 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800 transition-colors"
+          title="Open Main Menu"
+        >
+          <Menu className="w-5 h-5" />
+        </button>
         <div className="w-8 h-8 rounded-lg bg-sky-500/10 border border-sky-500/30 flex items-center justify-center text-sky-600 dark:text-sky-400">
           <BookOpen className="w-4 h-4" />
         </div>

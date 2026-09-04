@@ -9,13 +9,20 @@
       (function() {
         try {
           var savedTheme = localStorage.getItem('theme');
-          if (savedTheme === 'dark' || (!savedTheme && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
+          if (savedTheme === 'dark') {
             document.documentElement.classList.add('dark');
           } else if (savedTheme === 'light') {
             document.documentElement.classList.remove('dark');
           } else {
-            // Default to dark if no preference and no OS preference
-            document.documentElement.classList.add('dark');
+            // No saved preference. Check OS.
+            if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) {
+              document.documentElement.classList.add('dark');
+            } else if (window.matchMedia && !window.matchMedia('(prefers-color-scheme: dark)').matches) {
+               document.documentElement.classList.remove('dark');
+            } else {
+               // Default if no OS preference detection
+               document.documentElement.classList.add('dark');
+            }
           }
         } catch (e) {}
       })();

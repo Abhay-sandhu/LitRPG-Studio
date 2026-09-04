@@ -3,7 +3,6 @@ import { useEditor, EditorContent } from '@tiptap/react'
 import StarterKit from '@tiptap/starter-kit'
 import Placeholder from '@tiptap/extension-placeholder'
 import CharacterCount from '@tiptap/extension-character-count'
-import Underline from '@tiptap/extension-underline'
 import TextAlign from '@tiptap/extension-text-align'
 import Highlight from '@tiptap/extension-highlight'
 import { EditorToolbar } from './EditorToolbar'
@@ -34,34 +33,35 @@ const INITIAL_LITRPG_CONTENT = `
 <p>He grinned despite the chill. "Let's see what these old bones are worth."</p>
 `
 
+const TIPTAP_EXTENSIONS = [
+  StarterKit.configure({
+    heading: {
+      levels: [1, 2, 3],
+    },
+    blockquote: {
+      HTMLAttributes: {
+        class: 'system-blue-box',
+      },
+    },
+  }),
+  Placeholder.configure({
+    placeholder: 'Write your story here or insert a [System Box]...',
+  }),
+  CharacterCount,
+  TextAlign.configure({
+    types: ['heading', 'paragraph', 'blockquote'],
+  }),
+  Highlight.configure({
+    multicolor: true,
+  }),
+]
+
 export const TipTapEditor: React.FC<TipTapEditorProps> = ({
   onWordCountChange,
   onContentChange,
 }) => {
   const editor = useEditor({
-    extensions: [
-      StarterKit.configure({
-        heading: {
-          levels: [1, 2, 3],
-        },
-        blockquote: {
-          HTMLAttributes: {
-            class: 'system-blue-box',
-          },
-        },
-      }),
-      Placeholder.configure({
-        placeholder: 'Write your story here or insert a [System Box]...',
-      }),
-      CharacterCount,
-      Underline,
-      TextAlign.configure({
-        types: ['heading', 'paragraph', 'blockquote'],
-      }),
-      Highlight.configure({
-        multicolor: true,
-      }),
-    ],
+    extensions: TIPTAP_EXTENSIONS,
     content: INITIAL_LITRPG_CONTENT,
     onUpdate: ({ editor }) => {
       const words = editor.storage.characterCount.words()

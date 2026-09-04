@@ -3,10 +3,16 @@ import { Editor } from '@tiptap/react'
 import {
   Bold,
   Italic,
+  Underline as UnderlineIcon,
   Strikethrough,
+  Highlighter,
   Heading1,
   Heading2,
   Heading3,
+  AlignLeft,
+  AlignCenter,
+  AlignRight,
+  AlignJustify,
   List,
   ListOrdered,
   Terminal,
@@ -30,7 +36,7 @@ export const EditorToolbar: React.FC<EditorToolbarProps> = ({ editor }) => {
     }`
 
   return (
-    <div className="sticky top-0 z-10 flex items-center gap-1 border-b border-slate-200 dark:border-slate-800/80 bg-white/90 dark:bg-slate-900/90 backdrop-blur px-6 py-2 transition-colors">
+    <div className="sticky top-0 z-10 flex items-center gap-1 border-b border-slate-200 dark:border-slate-800/80 bg-white/90 dark:bg-slate-900/90 backdrop-blur px-6 py-2 transition-colors overflow-x-auto whitespace-nowrap scrollbar-hide">
       <button
         type="button"
         onClick={() => editor.chain().focus().toggleBold().run()}
@@ -49,14 +55,30 @@ export const EditorToolbar: React.FC<EditorToolbarProps> = ({ editor }) => {
       </button>
       <button
         type="button"
+        onClick={() => editor.chain().focus().toggleUnderline().run()}
+        className={buttonClass(editor.isActive('underline'))}
+        title="Underline (Ctrl+U)"
+      >
+        <UnderlineIcon className="w-4 h-4" />
+      </button>
+      <button
+        type="button"
         onClick={() => editor.chain().focus().toggleStrike().run()}
         className={buttonClass(editor.isActive('strike'))}
         title="Strikethrough"
       >
         <Strikethrough className="w-4 h-4" />
       </button>
+      <button
+        type="button"
+        onClick={() => editor.chain().focus().toggleHighlight().run()}
+        className={buttonClass(editor.isActive('highlight'))}
+        title="Highlight"
+      >
+        <Highlighter className="w-4 h-4" />
+      </button>
 
-      <div className="h-4 w-[1px] bg-slate-200 dark:bg-slate-800 mx-1" />
+      <div className="h-4 w-[1px] bg-slate-200 dark:bg-slate-800 mx-1 shrink-0" />
 
       <button
         type="button"
@@ -83,7 +105,42 @@ export const EditorToolbar: React.FC<EditorToolbarProps> = ({ editor }) => {
         <Heading3 className="w-4 h-4" />
       </button>
 
-      <div className="h-4 w-[1px] bg-slate-200 dark:bg-slate-800 mx-1" />
+      <div className="h-4 w-[1px] bg-slate-200 dark:bg-slate-800 mx-1 shrink-0" />
+
+      <button
+        type="button"
+        onClick={() => editor.chain().focus().setTextAlign('left').run()}
+        className={buttonClass(editor.isActive({ textAlign: 'left' }))}
+        title="Align Left"
+      >
+        <AlignLeft className="w-4 h-4" />
+      </button>
+      <button
+        type="button"
+        onClick={() => editor.chain().focus().setTextAlign('center').run()}
+        className={buttonClass(editor.isActive({ textAlign: 'center' }))}
+        title="Align Center"
+      >
+        <AlignCenter className="w-4 h-4" />
+      </button>
+      <button
+        type="button"
+        onClick={() => editor.chain().focus().setTextAlign('right').run()}
+        className={buttonClass(editor.isActive({ textAlign: 'right' }))}
+        title="Align Right"
+      >
+        <AlignRight className="w-4 h-4" />
+      </button>
+      <button
+        type="button"
+        onClick={() => editor.chain().focus().setTextAlign('justify').run()}
+        className={buttonClass(editor.isActive({ textAlign: 'justify' }))}
+        title="Justify"
+      >
+        <AlignJustify className="w-4 h-4" />
+      </button>
+
+      <div className="h-4 w-[1px] bg-slate-200 dark:bg-slate-800 mx-1 shrink-0" />
 
       <button
         type="button"
@@ -102,13 +159,13 @@ export const EditorToolbar: React.FC<EditorToolbarProps> = ({ editor }) => {
         <ListOrdered className="w-4 h-4" />
       </button>
 
-      <div className="h-4 w-[1px] bg-slate-200 dark:bg-slate-800 mx-1" />
+      <div className="h-4 w-[1px] bg-slate-200 dark:bg-slate-800 mx-1 shrink-0" />
 
       {/* LitRPG Blue Box / System Notification Button */}
       <button
         type="button"
         onClick={() => editor.chain().focus().toggleBlockquote().run()}
-        className={`flex items-center gap-1.5 px-2.5 py-1 rounded text-xs font-mono transition-colors ${
+        className={`flex items-center gap-1.5 px-2.5 py-1 rounded text-xs font-mono transition-colors shrink-0 ${
           editor.isActive('blockquote')
             ? 'bg-sky-100 dark:bg-sky-500/30 text-sky-800 dark:text-sky-300 border border-sky-300 dark:border-sky-400 shadow-sm'
             : 'bg-slate-50 dark:bg-sky-950/40 text-sky-700 dark:text-sky-400 hover:bg-slate-100 dark:hover:bg-sky-900/50 border border-slate-200 dark:border-sky-800/60'
@@ -128,7 +185,7 @@ export const EditorToolbar: React.FC<EditorToolbarProps> = ({ editor }) => {
         <Minus className="w-4 h-4" />
       </button>
 
-      <div className="ml-auto flex items-center gap-1">
+      <div className="ml-auto flex items-center gap-1 shrink-0">
         <button
           type="button"
           onClick={() => editor.chain().focus().undo().run()}

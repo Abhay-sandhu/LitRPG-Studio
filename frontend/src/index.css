@@ -89,4 +89,9 @@
   pointer-events: none;
 }
 
+/* Highlight styling */
+.tiptap mark {
+  @apply bg-amber-200 text-amber-900 dark:bg-amber-900/60 dark:text-amber-100 rounded px-1 font-medium;
+}
+
 
