@@ -34,15 +34,16 @@ export const GlobalNav: React.FC<GlobalNavProps> = ({
   return (
     <>
       {/* Backdrop */}
-      {isOpen && (
-        <div
-          className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-40 transition-opacity"
-          onClick={onClose}
-        />
-      )}
+      <div
+        className={`fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-40 transition-opacity duration-300 ${
+          isOpen ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'
+        }`}
+        onClick={onClose}
+      />
 
       {/* Slide-out Drawer */}
       <div
+        inert={!isOpen ? "" : undefined}
         className={`fixed inset-y-0 left-0 w-64 bg-white dark:bg-slate-950 border-r border-slate-200 dark:border-slate-800 z-50 transform transition-transform duration-300 ease-in-out ${
           isOpen ? 'translate-x-0' : '-translate-x-full'
         } flex flex-col`}

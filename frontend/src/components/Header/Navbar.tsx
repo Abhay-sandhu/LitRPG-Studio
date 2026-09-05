@@ -10,7 +10,7 @@ interface NavbarProps {
   onOpenNav: () => void
 }
 
-export const Navbar: React.FC<NavbarProps> = ({ wordCount, chapterTitle, isAnalyzing, isDarkMode, onToggleTheme, onOpenNav }) => {
+export const Navbar: React.FC<NavbarProps> = React.memo(({ wordCount, chapterTitle, isAnalyzing, isDarkMode, onToggleTheme, onOpenNav }) => {
   return (
     <header className="h-14 border-b border-slate-200 dark:border-slate-800 bg-white/90 dark:bg-slate-900/90 backdrop-blur px-4 flex items-center justify-between select-none z-10 transition-colors">
       <div className="flex items-center space-x-3">
@@ -34,10 +34,10 @@ export const Navbar: React.FC<NavbarProps> = ({ wordCount, chapterTitle, isAnaly
         </div>
       </div>
 
-      <div className="flex items-center space-x-2 text-sm text-slate-500 dark:text-slate-400">
-        <span className="font-medium text-slate-800 dark:text-slate-200">{chapterTitle}</span>
-        <span className="text-slate-300 dark:text-slate-600">•</span>
-        <span className="text-xs bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded text-slate-600 dark:text-slate-400">
+      <div className="flex items-center space-x-2 text-sm text-slate-500 dark:text-slate-400 min-w-0 flex-1 justify-center px-4">
+        <span className="font-medium text-slate-800 dark:text-slate-200 truncate">{chapterTitle}</span>
+        <span className="text-slate-300 dark:text-slate-600 shrink-0">•</span>
+        <span className="text-xs bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded text-slate-600 dark:text-slate-400 shrink-0">
           {wordCount} words
         </span>
       </div>
@@ -65,4 +65,4 @@ export const Navbar: React.FC<NavbarProps> = ({ wordCount, chapterTitle, isAnaly
       </div>
     </header>
   )
-}
+})

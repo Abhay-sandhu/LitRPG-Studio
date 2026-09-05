@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React, { useState, useRef } from 'react'
 import {
   User,
   Sparkles,
@@ -48,12 +48,13 @@ interface RightInspectorProps {
   onAcceptDraft?: (draft: DraftItem) => void
 }
 
-export const RightInspector: React.FC<RightInspectorProps> = ({
+export const RightInspector: React.FC<RightInspectorProps> = React.memo(({
   collapsed,
   onToggleCollapse,
   onAcceptDraft,
 }) => {
   const [activeTab, setActiveTab] = useState<'sheet' | 'drafts'>('sheet')
+  const processedDrafts = useRef<Set<number>>(new Set())
 
   // Live Character State with reactive stats
   const [character, setCharacter] = useState<CharacterData>({
@@ -103,14 +104,17 @@ export const RightInspector: React.FC<RightInspectorProps> = ({
 
   // Accept: Actually apply the stat change or inventory item to the character
   const handleAccept = (id: number) => {
+    if (processedDrafts.current.has(id)) return
+    processedDrafts.current.add(id)
+
     const draft = drafts.find((d) => d.id === id)
     if (!draft) return
 
     setCharacter((prev) => {
       const updated = { ...prev }
 
-      // Apply stat changes if payload contains statKey
-      if (draft.statKey && draft.amount) {
+      // Apply stat changes if payload contains statKey and a valid number
+      if (draft.statKey && draft.amount !== undefined) {
         updated.stats = {
           ...prev.stats,
           [draft.statKey]: prev.stats[draft.statKey] + draft.amount,
@@ -307,13 +311,13 @@ export const RightInspector: React.FC<RightInspectorProps> = ({
                 </h4>
               </div>
               <div className="space-y-1.5">
-                {character.inventory.map((item) => (
+                {character.inventory.map((item, idx) => (
                   <div
-                    key={item.id}
+                    key={`${item.id}-${idx}`}
                     className="flex items-center justify-between px-2.5 py-1.5 rounded-lg bg-slate-50 dark:bg-slate-900/80 border border-slate-200 dark:border-slate-800 text-xs text-slate-700 dark:text-slate-200"
                   >
-                    <span>{item.name}</span>
-                    <span className="text-[10px] text-sky-700 dark:text-sky-400 bg-sky-100 dark:bg-sky-950/60 px-1.5 py-0.5 rounded border border-sky-300 dark:border-sky-800/40">
+                    <span className="truncate min-w-0 mr-2">{item.name}</span>
+                    <span className="text-[10px] text-sky-700 dark:text-sky-400 bg-sky-100 dark:bg-sky-950/60 px-1.5 py-0.5 rounded border border-sky-300 dark:border-sky-800/40 shrink-0">
                       {item.bonus}
                     </span>
                   </div>
@@ -377,4 +381,4 @@ export const RightInspector: React.FC<RightInspectorProps> = ({
       </div>
     </aside>
   )
-}
+})

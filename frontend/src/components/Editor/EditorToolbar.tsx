@@ -41,6 +41,7 @@ export const EditorToolbar: React.FC<EditorToolbarProps> = ({ editor }) => {
         type="button"
         onClick={() => editor.chain().focus().toggleBold().run()}
         className={buttonClass(editor.isActive('bold'))}
+        aria-pressed={editor.isActive('bold')}
         title="Bold (Ctrl+B)"
       >
         <Bold className="w-4 h-4" />
@@ -49,6 +50,7 @@ export const EditorToolbar: React.FC<EditorToolbarProps> = ({ editor }) => {
         type="button"
         onClick={() => editor.chain().focus().toggleItalic().run()}
         className={buttonClass(editor.isActive('italic'))}
+        aria-pressed={editor.isActive('italic')}
         title="Italic (Ctrl+I)"
       >
         <Italic className="w-4 h-4" />
@@ -57,6 +59,7 @@ export const EditorToolbar: React.FC<EditorToolbarProps> = ({ editor }) => {
         type="button"
         onClick={() => editor.chain().focus().toggleUnderline().run()}
         className={buttonClass(editor.isActive('underline'))}
+        aria-pressed={editor.isActive('underline')}
         title="Underline (Ctrl+U)"
       >
         <UnderlineIcon className="w-4 h-4" />
@@ -65,6 +68,7 @@ export const EditorToolbar: React.FC<EditorToolbarProps> = ({ editor }) => {
         type="button"
         onClick={() => editor.chain().focus().toggleStrike().run()}
         className={buttonClass(editor.isActive('strike'))}
+        aria-pressed={editor.isActive('strike')}
         title="Strikethrough"
       >
         <Strikethrough className="w-4 h-4" />
@@ -73,6 +77,7 @@ export const EditorToolbar: React.FC<EditorToolbarProps> = ({ editor }) => {
         type="button"
         onClick={() => editor.chain().focus().toggleHighlight().run()}
         className={buttonClass(editor.isActive('highlight'))}
+        aria-pressed={editor.isActive('highlight')}
         title="Highlight"
       >
         <Highlighter className="w-4 h-4" />
@@ -84,6 +89,7 @@ export const EditorToolbar: React.FC<EditorToolbarProps> = ({ editor }) => {
         type="button"
         onClick={() => editor.chain().focus().toggleHeading({ level: 1 }).run()}
         className={buttonClass(editor.isActive('heading', { level: 1 }))}
+        aria-pressed={editor.isActive('heading', { level: 1 })}
         title="Heading 1"
       >
         <Heading1 className="w-4 h-4" />
@@ -92,6 +98,7 @@ export const EditorToolbar: React.FC<EditorToolbarProps> = ({ editor }) => {
         type="button"
         onClick={() => editor.chain().focus().toggleHeading({ level: 2 }).run()}
         className={buttonClass(editor.isActive('heading', { level: 2 }))}
+        aria-pressed={editor.isActive('heading', { level: 2 })}
         title="Heading 2"
       >
         <Heading2 className="w-4 h-4" />
@@ -100,6 +107,7 @@ export const EditorToolbar: React.FC<EditorToolbarProps> = ({ editor }) => {
         type="button"
         onClick={() => editor.chain().focus().toggleHeading({ level: 3 }).run()}
         className={buttonClass(editor.isActive('heading', { level: 3 }))}
+        aria-pressed={editor.isActive('heading', { level: 3 })}
         title="Heading 3"
       >
         <Heading3 className="w-4 h-4" />
@@ -111,6 +119,7 @@ export const EditorToolbar: React.FC<EditorToolbarProps> = ({ editor }) => {
         type="button"
         onClick={() => editor.chain().focus().setTextAlign('left').run()}
         className={buttonClass(editor.isActive({ textAlign: 'left' }))}
+        aria-pressed={editor.isActive({ textAlign: 'left' })}
         title="Align Left"
       >
         <AlignLeft className="w-4 h-4" />
@@ -119,6 +128,7 @@ export const EditorToolbar: React.FC<EditorToolbarProps> = ({ editor }) => {
         type="button"
         onClick={() => editor.chain().focus().setTextAlign('center').run()}
         className={buttonClass(editor.isActive({ textAlign: 'center' }))}
+        aria-pressed={editor.isActive({ textAlign: 'center' })}
         title="Align Center"
       >
         <AlignCenter className="w-4 h-4" />
@@ -127,6 +137,7 @@ export const EditorToolbar: React.FC<EditorToolbarProps> = ({ editor }) => {
         type="button"
         onClick={() => editor.chain().focus().setTextAlign('right').run()}
         className={buttonClass(editor.isActive({ textAlign: 'right' }))}
+        aria-pressed={editor.isActive({ textAlign: 'right' })}
         title="Align Right"
       >
         <AlignRight className="w-4 h-4" />
@@ -135,6 +146,7 @@ export const EditorToolbar: React.FC<EditorToolbarProps> = ({ editor }) => {
         type="button"
         onClick={() => editor.chain().focus().setTextAlign('justify').run()}
         className={buttonClass(editor.isActive({ textAlign: 'justify' }))}
+        aria-pressed={editor.isActive({ textAlign: 'justify' })}
         title="Justify"
       >
         <AlignJustify className="w-4 h-4" />
@@ -146,6 +158,7 @@ export const EditorToolbar: React.FC<EditorToolbarProps> = ({ editor }) => {
         type="button"
         onClick={() => editor.chain().focus().toggleBulletList().run()}
         className={buttonClass(editor.isActive('bulletList'))}
+        aria-pressed={editor.isActive('bulletList')}
         title="Bullet List"
       >
         <List className="w-4 h-4" />
@@ -154,6 +167,7 @@ export const EditorToolbar: React.FC<EditorToolbarProps> = ({ editor }) => {
         type="button"
         onClick={() => editor.chain().focus().toggleOrderedList().run()}
         className={buttonClass(editor.isActive('orderedList'))}
+        aria-pressed={editor.isActive('orderedList')}
         title="Numbered List"
       >
         <ListOrdered className="w-4 h-4" />
@@ -170,6 +184,7 @@ export const EditorToolbar: React.FC<EditorToolbarProps> = ({ editor }) => {
             ? 'bg-sky-100 dark:bg-sky-500/30 text-sky-800 dark:text-sky-300 border border-sky-300 dark:border-sky-400 shadow-sm'
             : 'bg-slate-50 dark:bg-sky-950/40 text-sky-700 dark:text-sky-400 hover:bg-slate-100 dark:hover:bg-sky-900/50 border border-slate-200 dark:border-sky-800/60'
         }`}
+        aria-pressed={editor.isActive('blockquote')}
         title="Insert or toggle LitRPG System Box"
       >
         <Terminal className="w-3.5 h-3.5" />

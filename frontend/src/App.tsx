@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { Navbar } from './components/Header/Navbar'
 import { LeftSidebar } from './components/Sidebar/LeftSidebar'
 import { TipTapEditor } from './components/Editor/TipTapEditor'
@@ -44,11 +44,18 @@ export default function App() {
     }
   }, [isDarkMode])
 
+  // Stable callbacks for memoized child components to prevent re-renders on keystrokes
+  const toggleLeftCollapse = useCallback(() => setLeftCollapsed(p => !p), [])
+  const toggleRightCollapse = useCallback(() => setRightCollapsed(p => !p), [])
+  const toggleTheme = useCallback(() => setIsDarkMode(p => !p), [])
+  const openNav = useCallback(() => setNavOpen(true), [])
+  const closeNav = useCallback(() => setNavOpen(false), [])
+
   return (
     <div className="h-screen w-screen flex flex-col overflow-hidden font-sans bg-slate-50 text-slate-900 dark:bg-slate-950 dark:text-slate-100 transition-colors duration-200">
       <GlobalNav
         isOpen={navOpen}
-        onClose={() => setNavOpen(false)}
+        onClose={closeNav}
         currentView={currentView}
         onChangeView={setCurrentView}
       />
@@ -59,8 +66,8 @@ export default function App() {
         chapterTitle={currentView === 'editor' ? activeChapterTitle : 'Global Dashboard'}
         isAnalyzing={isAnalyzing}
         isDarkMode={isDarkMode}
-        onToggleTheme={() => setIsDarkMode(!isDarkMode)}
-        onOpenNav={() => setNavOpen(true)}
+        onToggleTheme={toggleTheme}
+        onOpenNav={openNav}
       />
 
       {/* Main Workspace Area based on selected View */}
@@ -69,7 +76,7 @@ export default function App() {
           {/* Left Sidebar: Chapters & Local Story Bible */}
           <LeftSidebar
             collapsed={leftCollapsed}
-            onToggleCollapse={() => setLeftCollapsed(!leftCollapsed)}
+            onToggleCollapse={toggleLeftCollapse}
             chapters={chapters}
             activeChapterId={activeChapterId}
             onSelectChapter={setActiveChapterId}
@@ -83,7 +90,7 @@ export default function App() {
           {/* Right Inspector: Live Character Sheet & AI Draft Queue */}
           <RightInspector
             collapsed={rightCollapsed}
-            onToggleCollapse={() => setRightCollapsed(!rightCollapsed)}
+            onToggleCollapse={toggleRightCollapse}
           />
         </div>
       )}

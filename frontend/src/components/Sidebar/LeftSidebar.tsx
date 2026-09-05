@@ -26,7 +26,7 @@ interface LeftSidebarProps {
   onSelectChapter: (id: string) => void
 }
 
-export const LeftSidebar: React.FC<LeftSidebarProps> = ({
+export const LeftSidebar: React.FC<LeftSidebarProps> = React.memo(({
   collapsed,
   onToggleCollapse,
   chapters,
@@ -160,23 +160,24 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = ({
             </div>
 
             {filteredChapters.map((ch) => (
-              <div
+              <button
                 key={ch.id}
+                type="button"
                 onClick={() => onSelectChapter(ch.id)}
-                className={`group flex items-center justify-between px-2.5 py-1.5 rounded-md cursor-pointer transition-colors ${
+                className={`w-full group flex items-center justify-between px-2.5 py-1.5 rounded-md cursor-pointer transition-colors ${
                   activeChapterId === ch.id
                     ? 'bg-sky-50 dark:bg-sky-500/10 text-sky-700 dark:text-sky-300 border border-sky-200 dark:border-sky-500/20'
                     : 'text-slate-700 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800/50'
                 }`}
               >
-                <div className="flex items-center space-x-2 truncate">
+                <div className="flex items-center space-x-2 truncate min-w-0">
                   <FileText className={`w-3.5 h-3.5 shrink-0 ${activeChapterId === ch.id ? 'text-sky-600 dark:text-sky-400' : 'text-slate-400 dark:text-slate-500'}`} />
                   <span className="truncate text-xs">{ch.title}</span>
                 </div>
                 <span className="text-[10px] text-slate-400 dark:text-slate-500 group-hover:text-slate-500 dark:group-hover:text-slate-400 shrink-0">
                   {ch.words}w
                 </span>
-              </div>
+              </button>
             ))}
           </>
         ) : (
@@ -191,22 +192,22 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = ({
                 <Plus className="w-3.5 h-3.5" />
               </button>
             </div>
-
-            {filteredEntities.map((item) => {
+            {filteredEntities.map((item, idx) => {
               const Icon = item.icon
               return (
-                <div
-                  key={item.id}
-                  className="flex items-center justify-between px-2.5 py-1.5 rounded-md text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800/50 cursor-pointer transition-colors"
+                <button
+                  key={`${item.id}-${idx}`}
+                  type="button"
+                  className="w-full flex items-center justify-between px-2.5 py-1.5 rounded-md text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800/50 cursor-pointer transition-colors"
                 >
-                  <div className="flex items-center space-x-2 truncate">
+                  <div className="flex items-center space-x-2 truncate min-w-0">
                     <Icon className="w-3.5 h-3.5 text-sky-600 dark:text-sky-400 shrink-0" />
                     <span className="truncate text-xs">{item.name}</span>
                   </div>
-                  <span className="text-[10px] text-slate-500 dark:text-slate-400 bg-slate-100 dark:bg-slate-800/80 px-1.5 py-0.5 rounded border border-slate-200 dark:border-transparent">
+                  <span className="text-[10px] text-slate-500 dark:text-slate-400 bg-slate-100 dark:bg-slate-800/80 px-1.5 py-0.5 rounded border border-slate-200 dark:border-transparent shrink-0 ml-2">
                     {item.rank}
                   </span>
-                </div>
+                </button>
               )
             })}
           </>
@@ -214,4 +215,4 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = ({
       </div>
     </aside>
   )
-}
+})
