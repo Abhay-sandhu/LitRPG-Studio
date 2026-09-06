@@ -7,31 +7,15 @@ import TextAlign from '@tiptap/extension-text-align'
 import Highlight from '@tiptap/extension-highlight'
 import { EditorToolbar } from './EditorToolbar'
 
+import { useMutation, useQueryClient } from '@tanstack/react-query'
+import { updateChapter } from '../../api'
+
 interface TipTapEditorProps {
+  chapterId?: number
+  initialContent?: string
   onWordCountChange?: (count: number) => void
   onContentChange?: (content: string) => void
 }
-
-const INITIAL_LITRPG_CONTENT = `
-<h2>Chapter 1: The Crypt of the Fallen King</h2>
-<p>The damp stone walls of the lower catacombs dripped with stagnant water. Ethan tightened his grip on the cracked hilt of his shortsword, his knuckles white in the gloom. His breath plumed in the freezing subterranean air.</p>
-
-<blockquote style="text-align: center">
-  <p><strong>[SYSTEM ANNOUNCEMENT]</strong></p>
-  <p>You have entered: <mark>The Sunken Catacombs (Floor 1)</mark>.</p>
-  <p>Level Requirement: 1-5 | Hazard Level: Low</p>
-</blockquote>
-
-<p>Ahead, pair after pair of glowing crimson eyes ignited in the darkness. The skeletal sentinels rattled as they drew rusted iron blades from the earthen floor. Ethan took a slow, measured step forward, feeling the hum of mana dormant within his veins.</p>
-
-<blockquote style="text-align: center">
-  <p><strong>[COMBAT ENGAGED]</strong></p>
-  <p>Enemy Detected: <u>Skeletal Sentinel</u> (Level 2)</p>
-  <p>Warning: Blunt physical resistance +15%.</p>
-</blockquote>
-
-<p>He grinned despite the chill. "Let's see what these old bones are worth."</p>
-`
 
 const TIPTAP_EXTENSIONS = [
   StarterKit.configure({
@@ -57,29 +41,51 @@ const TIPTAP_EXTENSIONS = [
 ]
 
 export const TipTapEditor: React.FC<TipTapEditorProps> = ({
+  chapterId,
+  initialContent = '',
   onWordCountChange,
   onContentChange,
 }) => {
+  const queryClient = useQueryClient()
+  const timeoutRef = React.useRef<ReturnType<typeof setTimeout>>()
+  const isUpdatingRef = React.useRef(false)
+  
+  const mutation = useMutation({
+    mutationFn: (vars: { id: number, payload: any }) => updateChapter(vars.id, vars.payload),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['chapters'] })
+    }
+  })
+
   const editor = useEditor({
     extensions: TIPTAP_EXTENSIONS,
-    content: INITIAL_LITRPG_CONTENT,
+    content: initialContent,
     onUpdate: ({ editor }) => {
+      if (isUpdatingRef.current) return
       const words = editor.storage.characterCount.words()
-      if (onWordCountChange) {
-        onWordCountChange(words)
-      }
-      if (onContentChange) {
-        onContentChange(editor.getHTML())
+      const content = editor.getHTML()
+      
+      if (onWordCountChange) onWordCountChange(words)
+      if (onContentChange) onContentChange(content)
+
+      if (chapterId) {
+        if (timeoutRef.current) clearTimeout(timeoutRef.current)
+        timeoutRef.current = setTimeout(() => {
+          mutation.mutate({ id: chapterId, payload: { content, words } })
+        }, 1000)
       }
     },
   })
 
-  // Set initial word count once editor is ready
+  // Sync editor content when active chapter changes
   useEffect(() => {
-    if (editor && onWordCountChange) {
-      onWordCountChange(editor.storage.characterCount.words())
+    if (editor && chapterId) {
+      isUpdatingRef.current = true
+      editor.commands.setContent(initialContent)
+      setTimeout(() => { isUpdatingRef.current = false }, 0)
     }
-  }, [editor, onWordCountChange])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [editor, chapterId])
 
   return (
     <div className="flex-1 flex flex-col h-full bg-white dark:bg-slate-950 overflow-hidden transition-colors">

@@ -12,8 +12,11 @@ import {
   Users,
 } from 'lucide-react'
 
+import { useQuery } from '@tanstack/react-query'
+import { fetchLore } from '../../api'
+
 export interface ChapterItem {
-  id: string
+  id: number
   title: string
   words: number
 }
@@ -22,8 +25,15 @@ interface LeftSidebarProps {
   collapsed: boolean
   onToggleCollapse: () => void
   chapters: ChapterItem[]
-  activeChapterId: string
-  onSelectChapter: (id: string) => void
+  activeChapterId: number
+  onSelectChapter: (id: number) => void
+}
+
+const ICON_MAP: Record<string, React.FC<any>> = {
+  Users: Users,
+  Sword: Sword,
+  Zap: Zap,
+  Shield: Shield
 }
 
 export const LeftSidebar: React.FC<LeftSidebarProps> = React.memo(({
@@ -36,12 +46,10 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = React.memo(({
   const [activeTab, setActiveTab] = useState<'chapters' | 'bible'>('chapters')
   const [searchQuery, setSearchQuery] = useState('')
 
-  const bibleEntities = [
-    { id: 'entity-ethan', name: 'Ethan Storm', type: 'Character', icon: Users, rank: 'Lv. 1 Novice' },
-    { id: 'entity-shortsword', name: 'Rusty Shortsword', type: 'Item', icon: Sword, rank: 'Common' },
-    { id: 'entity-spark', name: 'Mana Spark', type: 'Skill', icon: Zap, rank: 'Tier 1' },
-    { id: 'entity-catacombs', name: 'Sunken Catacombs', type: 'Location', icon: Shield, rank: 'Floor 1' },
-  ]
+  const { data: bibleEntities = [] } = useQuery({
+    queryKey: ['lore', 1],
+    queryFn: () => fetchLore(1)
+  })
 
   const filteredChapters = chapters.filter((ch) =>
     ch.title.toLowerCase().includes(searchQuery.toLowerCase())
@@ -192,8 +200,8 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = React.memo(({
                 <Plus className="w-3.5 h-3.5" />
               </button>
             </div>
-            {filteredEntities.map((item, idx) => {
-              const Icon = item.icon
+            {filteredEntities.map((item: any, idx: number) => {
+              const Icon = ICON_MAP[item.icon] || FileText
               return (
                 <button
                   key={`${item.id}-${idx}`}

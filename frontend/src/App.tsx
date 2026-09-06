@@ -6,6 +6,8 @@ import { RightInspector } from './components/Inspector/RightInspector'
 import { GlobalNav } from './components/Navigation/GlobalNav'
 import type { ViewType } from './components/Navigation/GlobalNav'
 import { ProjectsView, BibleView, AnalyticsView, SettingsView } from './components/Views/PlaceholderViews'
+import { useQuery } from '@tanstack/react-query'
+import { fetchChapters } from './api'
 import './App.css'
 
 export default function App() {
@@ -18,15 +20,17 @@ export default function App() {
   const [navOpen, setNavOpen] = useState(false)
   const [currentView, setCurrentView] = useState<ViewType>('editor')
 
-  // Manage Chapters
-  const [chapters] = useState([
-    { id: 'ch1', title: 'Chapter 1: The Crypt of the Fallen King', words: 1420 },
-    { id: 'ch2', title: 'Chapter 2: The First Catalyst', words: 2150 },
-    { id: 'ch3', title: 'Chapter 3: Embers in the Gloom', words: 890 },
-  ])
-  const [activeChapterId, setActiveChapterId] = useState('ch1')
+  const projectId = 1 // Hardcoded for now
+  
+  const { data: chapters = [], isLoading: isLoadingChapters } = useQuery({
+    queryKey: ['chapters', projectId],
+    queryFn: () => fetchChapters(projectId)
+  })
 
-  const activeChapterTitle = chapters.find(c => c.id === activeChapterId)?.title || 'Untitled Chapter'
+  const [activeChapterId, setActiveChapterId] = useState<number>(1)
+
+  const activeChapter = chapters.find((c: any) => c.id === activeChapterId)
+  const activeChapterTitle = activeChapter?.title || 'Untitled Chapter'
 
   const [isDarkMode, setIsDarkMode] = useState(() => {
     const saved = localStorage.getItem('theme')
@@ -84,6 +88,8 @@ export default function App() {
 
           {/* Center Canvas: TipTap Rich Text Editor */}
           <TipTapEditor
+            chapterId={activeChapterId}
+            initialContent={activeChapter?.content || ''}
             onWordCountChange={setWordCount}
           />
 
