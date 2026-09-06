@@ -12,8 +12,8 @@ import {
   Users,
 } from 'lucide-react'
 
-import { useQuery } from '@tanstack/react-query'
-import { fetchLore } from '../../api'
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { fetchLore, createChapter } from '../../api'
 
 export interface ChapterItem {
   id: number
@@ -25,7 +25,7 @@ interface LeftSidebarProps {
   collapsed: boolean
   onToggleCollapse: () => void
   chapters: ChapterItem[]
-  activeChapterId: number
+  activeChapterId?: number
   onSelectChapter: (id: number) => void
 }
 
@@ -43,12 +43,21 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = React.memo(({
   activeChapterId,
   onSelectChapter,
 }) => {
+  const queryClient = useQueryClient()
   const [activeTab, setActiveTab] = useState<'chapters' | 'bible'>('chapters')
   const [searchQuery, setSearchQuery] = useState('')
 
   const { data: bibleEntities = [] } = useQuery({
     queryKey: ['lore', 1],
     queryFn: () => fetchLore(1)
+  })
+
+  const createChapterMutation = useMutation({
+    mutationFn: () => createChapter({ project_id: 1, title: 'Untitled Chapter', words: 0, order: chapters.length + 1 }),
+    onSuccess: (newChapter) => {
+      queryClient.invalidateQueries({ queryKey: ['chapters'] })
+      onSelectChapter(newChapter.id)
+    }
   })
 
   const filteredChapters = chapters.filter((ch) =>
@@ -160,6 +169,7 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = React.memo(({
               <span>Volume 1</span>
               <button
                 type="button"
+                onClick={() => createChapterMutation.mutate()}
                 className="hover:text-sky-600 dark:hover:text-sky-400 transition-colors"
                 title="Add Chapter"
               >

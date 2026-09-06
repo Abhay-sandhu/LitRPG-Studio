@@ -6,11 +6,12 @@ interface NavbarProps {
   chapterTitle: string
   isAnalyzing: boolean
   isDarkMode: boolean
+  onChangeTitle?: (newTitle: string) => void
   onToggleTheme: () => void
   onOpenNav: () => void
 }
 
-export const Navbar: React.FC<NavbarProps> = React.memo(({ wordCount, chapterTitle, isAnalyzing, isDarkMode, onToggleTheme, onOpenNav }) => {
+export const Navbar: React.FC<NavbarProps> = React.memo(({ wordCount, chapterTitle, isAnalyzing, isDarkMode, onChangeTitle, onToggleTheme, onOpenNav }) => {
   return (
     <header className="h-14 border-b border-slate-200 dark:border-slate-800 bg-white/90 dark:bg-slate-900/90 backdrop-blur px-4 flex items-center justify-between select-none z-10 transition-colors">
       <div className="flex items-center space-x-3">
@@ -35,7 +36,13 @@ export const Navbar: React.FC<NavbarProps> = React.memo(({ wordCount, chapterTit
       </div>
 
       <div className="flex items-center space-x-2 text-sm text-slate-500 dark:text-slate-400 min-w-0 flex-1 justify-center px-4">
-        <span className="font-medium text-slate-800 dark:text-slate-200 truncate">{chapterTitle}</span>
+        <input 
+          type="text"
+          value={chapterTitle}
+          onChange={(e) => onChangeTitle?.(e.target.value)}
+          placeholder="Untitled Chapter"
+          className="font-medium text-slate-800 dark:text-slate-200 bg-transparent border-none outline-none truncate hover:bg-slate-100 dark:hover:bg-slate-800 focus:bg-white dark:focus:bg-slate-900 focus:ring-1 focus:ring-sky-500 rounded px-2 py-0.5 text-center transition-colors flex-shrink w-full max-w-[200px] sm:max-w-[300px] md:max-w-md"
+        />
         <span className="text-slate-300 dark:text-slate-600 shrink-0">•</span>
         <span className="text-xs bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded text-slate-600 dark:text-slate-400 shrink-0">
           {wordCount} words

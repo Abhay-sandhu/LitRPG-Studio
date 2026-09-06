@@ -9,6 +9,11 @@ export const fetchChapters = async (projectId: number) => {
     return data
 }
 
+export const createChapter = async (payload: any) => {
+    const { data } = await api.post('/chapters', payload)
+    return data
+}
+
 export const updateChapter = async (chapterId: number, payload: any) => {
     const { data } = await api.put('/chapters/' + chapterId, payload)
     return data

@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { Navbar } from './components/Header/Navbar'
 import { LeftSidebar } from './components/Sidebar/LeftSidebar'
 import { TipTapEditor } from './components/Editor/TipTapEditor'
@@ -6,8 +6,8 @@ import { RightInspector } from './components/Inspector/RightInspector'
 import { GlobalNav } from './components/Navigation/GlobalNav'
 import type { ViewType } from './components/Navigation/GlobalNav'
 import { ProjectsView, BibleView, AnalyticsView, SettingsView } from './components/Views/PlaceholderViews'
-import { useQuery } from '@tanstack/react-query'
-import { fetchChapters } from './api'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { fetchChapters, updateChapter } from './api'
 import './App.css'
 
 export default function App() {
@@ -27,7 +27,14 @@ export default function App() {
     queryFn: () => fetchChapters(projectId)
   })
 
-  const [activeChapterId, setActiveChapterId] = useState<number>(1)
+  const [activeChapterId, setActiveChapterId] = useState<number | null>(null)
+
+  // Default to first chapter if none is active
+  useEffect(() => {
+    if (!activeChapterId && chapters.length > 0) {
+      setActiveChapterId(chapters[0].id)
+    }
+  }, [chapters, activeChapterId])
 
   const activeChapter = chapters.find((c: any) => c.id === activeChapterId)
   const activeChapterTitle = activeChapter?.title || 'Untitled Chapter'
@@ -47,6 +54,25 @@ export default function App() {
       localStorage.setItem('theme', 'light')
     }
   }, [isDarkMode])
+
+  const queryClient = useQueryClient()
+  const titleTimeoutRef = useRef<ReturnType<typeof setTimeout>>()
+
+  const handleTitleChange = useCallback((newTitle: string) => {
+    if (!activeChapterId) return
+    
+    // Optimistic UI update for instant typing feel
+    queryClient.setQueryData(['chapters', projectId], (old: any) => 
+      old?.map((c: any) => c.id === activeChapterId ? { ...c, title: newTitle } : c)
+    )
+    
+    if (titleTimeoutRef.current) clearTimeout(titleTimeoutRef.current)
+    titleTimeoutRef.current = setTimeout(() => {
+      // Background save without invalidating to save an unnecessary network round-trip,
+      // as the optimistic UI update already contains the true state.
+      updateChapter(activeChapterId, { title: newTitle })
+    }, 500)
+  }, [activeChapterId, queryClient, projectId])
 
   // Stable callbacks for memoized child components to prevent re-renders on keystrokes
   const toggleLeftCollapse = useCallback(() => setLeftCollapsed(p => !p), [])
@@ -68,6 +94,7 @@ export default function App() {
       <Navbar
         wordCount={wordCount}
         chapterTitle={currentView === 'editor' ? activeChapterTitle : 'Global Dashboard'}
+        onChangeTitle={currentView === 'editor' ? handleTitleChange : undefined}
         isAnalyzing={isAnalyzing}
         isDarkMode={isDarkMode}
         onToggleTheme={toggleTheme}
@@ -82,13 +109,14 @@ export default function App() {
             collapsed={leftCollapsed}
             onToggleCollapse={toggleLeftCollapse}
             chapters={chapters}
-            activeChapterId={activeChapterId}
+            activeChapterId={activeChapterId ?? undefined}
             onSelectChapter={setActiveChapterId}
           />
 
           {/* Center Canvas: TipTap Rich Text Editor */}
           <TipTapEditor
-            chapterId={activeChapterId}
+            key={activeChapterId ?? 'empty'}
+            chapterId={activeChapterId ?? undefined}
             initialContent={activeChapter?.content || ''}
             onWordCountChange={setWordCount}
           />

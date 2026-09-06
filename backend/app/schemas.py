@@ -31,6 +31,12 @@ class LoreEntityBase(BaseModel):
 class LoreEntityCreate(LoreEntityBase):
     project_id: int
 
+class LoreEntityUpdate(BaseModel):
+    name: Optional[str] = None
+    type: Optional[str] = None
+    rank: Optional[str] = None
+    icon: Optional[str] = None
+
 class LoreEntity(LoreEntityBase):
     id: int
     project_id: int

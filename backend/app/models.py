@@ -12,7 +12,7 @@ class Project(Base):
 class Chapter(Base):
     __tablename__ = 'chapters'
     id = Column(Integer, primary_key=True, index=True)
-    project_id = Column(Integer, ForeignKey('projects.id'))
+    project_id = Column(Integer, ForeignKey('projects.id', ondelete="CASCADE"))
     title = Column(String, index=True)
     content = Column(Text, default='')
     words = Column(Integer, default=0)
@@ -22,7 +22,7 @@ class Chapter(Base):
 class LoreEntity(Base):
     __tablename__ = 'lore_entities'
     id = Column(Integer, primary_key=True, index=True)
-    project_id = Column(Integer, ForeignKey('projects.id'))
+    project_id = Column(Integer, ForeignKey('projects.id', ondelete="CASCADE"))
     name = Column(String, index=True)
     type = Column(String)
     rank = Column(String)

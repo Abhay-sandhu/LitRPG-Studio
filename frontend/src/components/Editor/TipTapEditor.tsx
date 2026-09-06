@@ -48,7 +48,36 @@ export const TipTapEditor: React.FC<TipTapEditorProps> = ({
 }) => {
   const queryClient = useQueryClient()
   const timeoutRef = React.useRef<ReturnType<typeof setTimeout>>()
-  const isUpdatingRef = React.useRef(false)
+  
+  const pendingSaveRef = React.useRef<{ id: number, content: string, words: number } | null>(null)
+  
+  useEffect(() => {
+    return () => {
+      if (timeoutRef.current) {
+        clearTimeout(timeoutRef.current)
+        if (pendingSaveRef.current) {
+          const savedData = pendingSaveRef.current
+          
+          // Optimistically update cache instantly to prevent rapid double-switch bug
+          queryClient.setQueriesData({ queryKey: ['chapters'] }, (old: any) => {
+            if (!old) return old
+            return old.map((c: any) => 
+              c.id === savedData.id 
+                ? { ...c, content: savedData.content, words: savedData.words } 
+                : c
+            )
+          })
+
+          updateChapter(savedData.id, {
+            content: savedData.content,
+            words: savedData.words
+          }).then(() => {
+            queryClient.invalidateQueries({ queryKey: ['chapters'] })
+          })
+        }
+      }
+    }
+  }, [queryClient])
   
   const mutation = useMutation({
     mutationFn: (vars: { id: number, payload: any }) => updateChapter(vars.id, vars.payload),
@@ -61,7 +90,6 @@ export const TipTapEditor: React.FC<TipTapEditorProps> = ({
     extensions: TIPTAP_EXTENSIONS,
     content: initialContent,
     onUpdate: ({ editor }) => {
-      if (isUpdatingRef.current) return
       const words = editor.storage.characterCount.words()
       const content = editor.getHTML()
       
@@ -69,23 +97,16 @@ export const TipTapEditor: React.FC<TipTapEditorProps> = ({
       if (onContentChange) onContentChange(content)
 
       if (chapterId) {
+        pendingSaveRef.current = { id: chapterId, content, words }
+        
         if (timeoutRef.current) clearTimeout(timeoutRef.current)
         timeoutRef.current = setTimeout(() => {
           mutation.mutate({ id: chapterId, payload: { content, words } })
+          pendingSaveRef.current = null
         }, 1000)
       }
     },
   })
-
-  // Sync editor content when active chapter changes
-  useEffect(() => {
-    if (editor && chapterId) {
-      isUpdatingRef.current = true
-      editor.commands.setContent(initialContent)
-      setTimeout(() => { isUpdatingRef.current = false }, 0)
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [editor, chapterId])
 
   return (
     <div className="flex-1 flex flex-col h-full bg-white dark:bg-slate-950 overflow-hidden transition-colors">
