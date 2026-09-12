@@ -1,5 +1,6 @@
 from pydantic import BaseModel
-from typing import List, Optional
+from typing import List, Optional, Any, Dict
+from datetime import datetime
 
 class ChapterBase(BaseModel):
     title: str
@@ -24,22 +25,64 @@ class Chapter(ChapterBase):
 
 class LoreEntityBase(BaseModel):
     name: str
-    type: str
-    rank: str
-    icon: str
+    category: str
+    description: Optional[str] = ''
+    attributes: Optional[Dict[str, Any]] = {}
+    is_promoted: Optional[bool] = False
 
 class LoreEntityCreate(LoreEntityBase):
     project_id: int
 
 class LoreEntityUpdate(BaseModel):
     name: Optional[str] = None
-    type: Optional[str] = None
-    rank: Optional[str] = None
-    icon: Optional[str] = None
+    category: Optional[str] = None
+    description: Optional[str] = None
+    attributes: Optional[Dict[str, Any]] = None
+    is_promoted: Optional[bool] = None
 
 class LoreEntity(LoreEntityBase):
     id: int
     project_id: int
+    class Config:
+        from_attributes = True
+
+class LedgerBase(BaseModel):
+    event_name: str
+    changes: Dict[str, Any] = {}
+    source_type: Optional[str] = "System Box"
+
+class LedgerCreate(LedgerBase):
+    chapter_id: int
+
+class Ledger(LedgerBase):
+    id: int
+    character_id: int
+    chapter_id: int
+    timestamp: datetime
+    class Config:
+        from_attributes = True
+
+class CharacterBase(BaseModel):
+    name: str
+    is_protagonist: Optional[bool] = False
+    stats: Optional[Dict[str, Any]] = {}
+    formulas: Optional[Dict[str, Any]] = {}
+    lore_entity_id: Optional[int] = None
+
+class CharacterCreate(CharacterBase):
+    project_id: int
+
+class CharacterUpdate(BaseModel):
+    name: Optional[str] = None
+    is_protagonist: Optional[bool] = None
+    stats: Optional[Dict[str, Any]] = None
+    formulas: Optional[Dict[str, Any]] = None
+    lore_entity_id: Optional[int] = None
+
+class Character(CharacterBase):
+    id: int
+    project_id: int
+    ledgers: List[Ledger] = []
     class Config:
         from_attributes = True
 
@@ -53,5 +96,6 @@ class Project(ProjectBase):
     id: int
     chapters: List[Chapter] = []
     lore_entities: List[LoreEntity] = []
+    characters: List[Character] = []
     class Config:
         from_attributes = True
