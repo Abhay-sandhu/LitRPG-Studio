@@ -65,8 +65,8 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = React.memo(({
   )
 
   const filteredEntities = bibleEntities.filter((item: any) =>
-    item.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    item.type.toLowerCase().includes(searchQuery.toLowerCase())
+    item.name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    (item.category || item.type)?.toLowerCase().includes(searchQuery.toLowerCase())
   )
 
   if (collapsed) {
@@ -211,7 +211,9 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = React.memo(({
               </button>
             </div>
             {filteredEntities.map((item: any, idx: number) => {
-              const Icon = ICON_MAP[item.icon] || FileText
+              const iconKey = item.attributes?.icon || item.icon
+              const Icon = ICON_MAP[iconKey as keyof typeof ICON_MAP] || FileText
+              const rankText = item.attributes?.rank || item.rank || item.category
               return (
                 <button
                   key={`${item.id}-${idx}`}
@@ -223,7 +225,7 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = React.memo(({
                     <span className="truncate text-xs">{item.name}</span>
                   </div>
                   <span className="text-[10px] text-slate-500 dark:text-slate-400 bg-slate-100 dark:bg-slate-800/80 px-1.5 py-0.5 rounded border border-slate-200 dark:border-transparent shrink-0 ml-2">
-                    {item.rank}
+                    {rankText}
                   </span>
                 </button>
               )

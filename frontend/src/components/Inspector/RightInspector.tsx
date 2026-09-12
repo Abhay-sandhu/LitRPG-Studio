@@ -7,137 +7,113 @@ import {
   ShieldAlert,
   Check,
   X,
-  Heart,
-  Droplet,
+  History,
+  Activity,
   Zap,
 } from 'lucide-react'
-
-export interface InventoryItem {
-  id: string
-  name: string
-  bonus: string
-}
-
-export interface CharacterData {
-  name: string
-  className: string
-  level: number
-  stats: {
-    str: number
-    agi: number
-    int: number
-    vit: number
-  }
-  inventory: InventoryItem[]
-}
+import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { fetchCharacters, fetchCharacterLedger, acceptActionDraft } from '../../api'
 
 export interface DraftItem {
   id: number
-  type: 'item' | 'stat'
+  type: 'item' | 'stat' | 'lore' | string
   title: string
   desc: string
   context: string
-  statKey?: 'str' | 'agi' | 'int' | 'vit'
-  amount?: number
-  item?: InventoryItem
+  changes?: Record<string, any>
+  lore_entity?: Record<string, any>
 }
 
 interface RightInspectorProps {
   collapsed: boolean
   onToggleCollapse: () => void
-  onAcceptDraft?: (draft: DraftItem) => void
+  projectId?: number
+  drafts: DraftItem[]
+  setDrafts: React.Dispatch<React.SetStateAction<DraftItem[]>>
+  onScanChapter: () => void
+  activeChapterId?: number
 }
 
 export const RightInspector: React.FC<RightInspectorProps> = React.memo(({
   collapsed,
   onToggleCollapse,
-  onAcceptDraft,
+  projectId = 1,
+  drafts,
+  setDrafts,
+  onScanChapter,
+  activeChapterId,
 }) => {
-  const [activeTab, setActiveTab] = useState<'sheet' | 'drafts'>('sheet')
-  const processedDrafts = useRef<Set<number>>(new Set())
+  const [activeTab, setActiveTab] = useState<'sheet' | 'ledger' | 'drafts'>('sheet')
 
-  // Live Character State with reactive stats
-  const [character, setCharacter] = useState<CharacterData>({
-    name: 'Ethan Storm',
-    className: 'Novice Spellsword',
-    level: 1,
-    stats: {
-      str: 10,
-      agi: 12,
-      int: 8,
-      vit: 10,
-    },
-    inventory: [
-      { id: 'starter-blade', name: 'Worn Dagger', bonus: '+1 Atk' },
-    ],
+  // Fetch Characters
+  const { data: characters = [], isLoading: isCharsLoading } = useQuery({
+    queryKey: ['characters', projectId],
+    queryFn: () => fetchCharacters(projectId)
   })
 
-  // Dynamic formula derivation
-  const maxHp = character.stats.vit * 10
-  const maxMana = character.stats.int * 10
+  const protagonist = characters.find((c: any) => c.is_protagonist) || characters[0]
+  
+  // Fetch Ledger for protagonist
+  const { data: ledger = [], isLoading: isLedgerLoading } = useQuery({
+    queryKey: ['ledger', protagonist?.id],
+    queryFn: () => fetchCharacterLedger(protagonist.id),
+    enabled: !!protagonist?.id
+  })
+  const queryClient = useQueryClient()
+  const processedDrafts = useRef<Set<number>>(new Set())
 
-  // Pending ambient drafts queue
-  const [drafts, setDrafts] = useState<DraftItem[]>([
-    {
-      id: 1,
-      type: 'item',
-      title: 'Item Acquisition',
-      desc: 'Found: Rusty Shortsword (+2 Attack, Common)',
-      context: 'Scene: Upper Catacombs floor',
-      item: { id: 'rusty-sword', name: 'Rusty Shortsword', bonus: '+2 Atk' },
-    },
-    {
-      id: 2,
-      type: 'stat',
-      title: 'Stat Change',
-      desc: 'Strength increased: 10 ➔ 12 (+2)',
-      context: 'After lifting the iron gate',
-      statKey: 'str',
-      amount: 2,
-    },
-  ])
-
-  // Dismiss: Remove from queue without modifying character
   const handleDismiss = (id: number) => {
     setDrafts((prev) => prev.filter((d) => d.id !== id))
   }
 
-  // Accept: Actually apply the stat change or inventory item to the character
-  const handleAccept = (id: number) => {
+  const handleAccept = async (id: number) => {
     if (processedDrafts.current.has(id)) return
     processedDrafts.current.add(id)
 
     const draft = drafts.find((d) => d.id === id)
-    if (!draft) return
+    if (!draft || !protagonist) return
 
-    setCharacter((prev) => {
-      const updated = { ...prev }
-
-      // Apply stat changes if payload contains statKey and a valid number
-      if (draft.statKey && draft.amount !== undefined) {
-        updated.stats = {
-          ...prev.stats,
-          [draft.statKey]: prev.stats[draft.statKey] + draft.amount,
-        }
+    try {
+      const updatedStats = { ...protagonist.stats }
+      
+      // If it's a stat change, merge it safely based on draft.changes structure
+      if (draft.changes && typeof draft.changes === 'object') {
+        Object.entries(draft.changes).forEach(([statKey, changeVal]: [string, any]) => {
+          if (changeVal.new !== undefined) {
+            let nestedFound = false
+            for (const [category, attributes] of Object.entries(updatedStats)) {
+              if (typeof attributes === 'object' && attributes !== null && !Array.isArray(attributes) && statKey in attributes) {
+                updatedStats[category] = { ...attributes, [statKey]: changeVal.new }
+                nestedFound = true
+                break
+              }
+            }
+            if (!nestedFound) {
+              updatedStats[statKey] = changeVal.new
+            }
+          }
+        })
       }
 
-      // Add item to inventory if payload contains an item
-      if (draft.item) {
-        updated.inventory = [...prev.inventory, draft.item]
+      const ledgerEntry = {
+        character_id: protagonist.id,
+        chapter_id: activeChapterId || 1,
+        event_name: draft.title,
+        changes: draft.changes || {},
+        source_type: "AI Draft"
       }
 
-      return updated
-    })
-
-    // Remove the accepted draft from the queue
-    setDrafts((prev) => prev.filter((d) => d.id !== id))
-
-    // Notify parent if callback provided
-    if (onAcceptDraft) {
-      onAcceptDraft(draft)
+      await acceptActionDraft(protagonist.id, { stats: updatedStats }, ledgerEntry)
+      
+      queryClient.invalidateQueries({ queryKey: ['characters'] })
+      queryClient.invalidateQueries({ queryKey: ['ledger', protagonist.id] })
+      
+      setDrafts((prev) => prev.filter((d) => d.id !== id))
+    } catch (err) {
+      console.error("Failed to accept draft:", err)
+      processedDrafts.current.delete(id)
     }
   }
-
   if (collapsed) {
     return (
       <aside className="w-12 border-l border-slate-200 dark:border-slate-800/80 bg-white dark:bg-slate-900/60 flex flex-col items-center py-3 select-none transition-colors">
@@ -157,9 +133,20 @@ export const RightInspector: React.FC<RightInspectorProps> = React.memo(({
                 ? 'bg-sky-50 dark:bg-sky-500/20 text-sky-600 dark:text-sky-400' 
                 : 'text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-slate-200'
             }`}
-            title="Open Character Sheet"
+            title="Character Sheet"
           >
             <User className="w-4 h-4" />
+          </button>
+          <button
+            onClick={() => { setActiveTab('ledger'); onToggleCollapse(); }}
+            className={`p-2 rounded flex justify-center items-center transition-colors ${
+              activeTab === 'ledger' 
+                ? 'bg-emerald-50 dark:bg-emerald-500/20 text-emerald-600 dark:text-emerald-400' 
+                : 'text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-slate-200'
+            }`}
+            title="Ledger History"
+          >
+            <History className="w-4 h-4" />
           </button>
           <button
             onClick={() => { setActiveTab('drafts'); onToggleCollapse(); }}
@@ -168,7 +155,7 @@ export const RightInspector: React.FC<RightInspectorProps> = React.memo(({
                 ? 'bg-amber-50 dark:bg-amber-500/20 text-amber-600 dark:text-amber-400' 
                 : 'text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-slate-200'
             }`}
-            title="Open AI Drafts"
+            title="AI Drafts"
           >
             <div className="relative">
               <Sparkles className="w-4 h-4" />
@@ -184,41 +171,54 @@ export const RightInspector: React.FC<RightInspectorProps> = React.memo(({
 
   return (
     <aside className="w-80 border-l border-slate-200 dark:border-slate-800/80 bg-slate-50 dark:bg-slate-900/60 flex flex-col select-none transition-colors text-sm">
-      {/* Header & Tabs */}
-      <div className="p-3 border-b border-slate-200 dark:border-slate-800/60 flex items-center justify-between">
-        <button
-          type="button"
-          onClick={onToggleCollapse}
-          className="p-1.5 text-slate-500 hover:text-slate-900 hover:bg-slate-200 dark:text-slate-400 dark:hover:text-slate-200 dark:hover:bg-slate-800 rounded transition-colors mr-2"
-          title="Collapse Inspector"
-        >
-          <ChevronRight className="w-4 h-4" />
-        </button>
+      <div className="p-3 border-b border-slate-200 dark:border-slate-800/60 flex flex-col gap-3">
+        <div className="flex items-center justify-between">
+            <span className="font-semibold text-slate-800 dark:text-slate-200 ml-1">RPG Engine</span>
+            <button
+            type="button"
+            onClick={onToggleCollapse}
+            className="p-1.5 text-slate-500 hover:text-slate-900 hover:bg-slate-200 dark:text-slate-400 dark:hover:text-slate-200 dark:hover:bg-slate-800 rounded transition-colors"
+            title="Collapse Inspector"
+            >
+            <ChevronRight className="w-4 h-4" />
+            </button>
+        </div>
 
-        <div className="flex bg-slate-200/50 dark:bg-slate-950/70 p-0.5 rounded-lg border border-slate-200 dark:border-slate-800/80 w-full">
+        <div className="flex bg-slate-200/50 dark:bg-slate-950/70 p-0.5 rounded-lg border border-slate-200 dark:border-slate-800/80 w-full text-[11px]">
           <button
             type="button"
             onClick={() => setActiveTab('sheet')}
-            className={`flex-1 py-1 rounded-md text-xs font-medium transition-colors ${
+            className={`flex-1 py-1 rounded-md font-medium transition-colors ${
               activeTab === 'sheet'
                 ? 'bg-white dark:bg-sky-500/20 text-sky-700 dark:text-sky-300 border border-slate-200 dark:border-sky-500/30 shadow-sm'
                 : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
             }`}
           >
-            Character Sheet
+            Sheet
+          </button>
+          <button
+            type="button"
+            onClick={() => setActiveTab('ledger')}
+            className={`flex-1 py-1 rounded-md font-medium transition-colors ${
+              activeTab === 'ledger'
+                ? 'bg-white dark:bg-emerald-500/20 text-emerald-700 dark:text-emerald-300 border border-slate-200 dark:border-emerald-500/30 shadow-sm'
+                : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
+            }`}
+          >
+            Ledger
           </button>
           <button
             type="button"
             onClick={() => setActiveTab('drafts')}
-            className={`flex-1 py-1 rounded-md text-xs font-medium transition-colors flex items-center justify-center gap-1.5 ${
+            className={`flex-1 py-1 rounded-md font-medium transition-colors flex items-center justify-center gap-1 ${
               activeTab === 'drafts'
                 ? 'bg-white dark:bg-amber-500/20 text-amber-700 dark:text-amber-300 border border-slate-200 dark:border-amber-500/30 shadow-sm'
                 : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
             }`}
           >
-            <span>AI Drafts</span>
+            <span>Drafts</span>
             {drafts.length > 0 && (
-              <span className="w-4 h-4 rounded-full bg-amber-100 dark:bg-amber-500/30 text-amber-700 dark:text-amber-300 text-[10px] font-bold flex items-center justify-center border border-amber-200 dark:border-amber-500/50">
+              <span className="w-3.5 h-3.5 rounded-full bg-amber-100 dark:bg-amber-500/30 text-amber-700 dark:text-amber-300 text-[9px] font-bold flex items-center justify-center border border-amber-200 dark:border-amber-500/50">
                 {drafts.length}
               </span>
             )}
@@ -226,118 +226,121 @@ export const RightInspector: React.FC<RightInspectorProps> = React.memo(({
         </div>
       </div>
 
-      {/* Main Content Area */}
       <div className="flex-1 overflow-y-auto p-4 space-y-4">
-        {activeTab === 'sheet' ? (
+        {isCharsLoading ? (
+            <div className="text-center py-8 text-slate-400"><Activity className="w-6 h-6 mx-auto animate-pulse" /></div>
+        ) : !protagonist ? (
+            <div className="text-center py-8 text-slate-400 text-xs">No character data available.</div>
+        ) : activeTab === 'sheet' ? (
           <>
             {/* Identity Card */}
-            <div className="bg-white dark:bg-slate-950/70 border border-slate-200 dark:border-slate-800/90 rounded-xl p-3.5 space-y-2 shadow-sm dark:shadow-none transition-colors">
+            <div className="bg-white dark:bg-slate-950/70 border border-slate-200 dark:border-slate-800/90 rounded-xl p-3.5 shadow-sm transition-colors">
               <div className="flex items-center justify-between">
                 <div>
-                  <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100">{character.name}</h3>
-                  <p className="text-xs text-slate-500 dark:text-slate-400">Class: {character.className}</p>
-                </div>
-                <div className="text-right">
-                  <span className="text-xs font-bold text-sky-700 dark:text-sky-400 bg-sky-50 dark:bg-sky-950/60 border border-sky-200 dark:border-sky-800/50 px-2 py-0.5 rounded-full">
-                    Level {character.level}
-                  </span>
-                </div>
-              </div>
-
-              {/* Resource Bars */}
-              <div className="space-y-1.5 pt-2">
-                <div>
-                  <div className="flex justify-between text-[11px] font-medium text-rose-600 dark:text-rose-400 mb-0.5">
-                    <span className="flex items-center gap-1">
-                      <Heart className="w-3 h-3" /> HP
-                    </span>
-                    <span>{maxHp} / {maxHp}</span>
-                  </div>
-                  <div className="h-1.5 w-full bg-slate-200 dark:bg-slate-800 rounded-full overflow-hidden">
-                    <div className="h-full bg-rose-500 rounded-full w-full" />
-                  </div>
-                </div>
-
-                <div>
-                  <div className="flex justify-between text-[11px] font-medium text-sky-600 dark:text-sky-400 mb-0.5">
-                    <span className="flex items-center gap-1">
-                      <Droplet className="w-3 h-3" /> Mana
-                    </span>
-                    <span>{maxMana} / {maxMana}</span>
-                  </div>
-                  <div className="h-1.5 w-full bg-slate-200 dark:bg-slate-800 rounded-full overflow-hidden">
-                    <div className="h-full bg-sky-500 rounded-full w-full" />
-                  </div>
+                  <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100">{protagonist.name}</h3>
+                  <p className="text-[10px] text-slate-500 dark:text-slate-400 uppercase tracking-wider mt-0.5">Primary Protagonist</p>
                 </div>
               </div>
             </div>
 
-            {/* Attributes & Formula Breakdown */}
-            <div className="bg-white dark:bg-slate-950/70 border border-slate-200 dark:border-slate-800/90 rounded-xl p-3.5 space-y-2.5 shadow-sm dark:shadow-none transition-colors">
-              <h4 className="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400 flex items-center gap-1.5">
-                <Zap className="w-3.5 h-3.5 text-sky-600 dark:text-sky-400" />
-                <span>Primary Attributes</span>
-              </h4>
+            {/* Dynamic Stats Rendering */}
+            {protagonist.stats && Object.entries(protagonist.stats).map(([category, attributes]: [string, any]) => (
+                <div key={category} className="bg-white dark:bg-slate-950/70 border border-slate-200 dark:border-slate-800/90 rounded-xl p-3.5 space-y-2.5 shadow-sm transition-colors">
+                    <h4 className="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400 flex items-center gap-1.5">
+                        <Zap className="w-3.5 h-3.5 text-sky-600 dark:text-sky-400" />
+                        <span>{category}</span>
+                    </h4>
+                    
+                    {Array.isArray(attributes) ? (
+                        <div className="flex flex-wrap gap-1.5">
+                            {attributes.map((attr, idx) => (
+                                <span key={idx} className="bg-slate-100 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 px-2 py-1 rounded-md text-[11px] text-slate-700 dark:text-slate-300">
+                                    {attr}
+                                </span>
+                            ))}
+                        </div>
+                    ) : typeof attributes === 'object' && attributes !== null ? (
+                        <div className="grid grid-cols-2 gap-2 text-xs">
+                            {Object.entries(attributes).map(([key, val]: [string, any]) => (
+                                <div key={key} className="bg-slate-50 dark:bg-slate-900/90 border border-slate-200 dark:border-slate-800 p-2 rounded-lg flex flex-col">
+                                    <span className="text-[10px] text-slate-500 dark:text-slate-400 uppercase tracking-wider">{key}</span>
+                                    <span className="text-base font-bold text-slate-900 dark:text-slate-100">{val}</span>
+                                </div>
+                            ))}
+                        </div>
+                    ) : (
+                        <div className="text-sm font-medium text-slate-800 dark:text-slate-200">{attributes}</div>
+                    )}
+                </div>
+            ))}
 
-              <div className="grid grid-cols-2 gap-2 text-xs">
-                <div className="bg-slate-50 dark:bg-slate-900/90 border border-slate-200 dark:border-slate-800 p-2 rounded-lg">
-                  <span className="text-slate-500 dark:text-slate-400">STR (Strength)</span>
-                  <div className="text-base font-bold text-slate-900 dark:text-slate-100">{character.stats.str}</div>
+            {/* Formulas Breakdown */}
+            {protagonist.formulas && Object.keys(protagonist.formulas).length > 0 && (
+                <div className="pt-1 space-y-1">
+                    {Object.entries(protagonist.formulas).map(([key, formula]: [string, any]) => (
+                        <div key={key} className="text-[10px] text-slate-500 font-mono bg-slate-50 dark:bg-slate-900/50 p-2 rounded border border-slate-200 dark:border-slate-800/50">
+                            {key} = {formula}
+                        </div>
+                    ))}
                 </div>
-                <div className="bg-slate-50 dark:bg-slate-900/90 border border-slate-200 dark:border-slate-800 p-2 rounded-lg">
-                  <span className="text-slate-500 dark:text-slate-400">AGI (Agility)</span>
-                  <div className="text-base font-bold text-slate-900 dark:text-slate-100">{character.stats.agi}</div>
-                </div>
-                <div className="bg-slate-50 dark:bg-slate-900/90 border border-slate-200 dark:border-slate-800 p-2 rounded-lg">
-                  <span className="text-slate-500 dark:text-slate-400">INT (Intelligence)</span>
-                  <div className="text-base font-bold text-slate-900 dark:text-slate-100">{character.stats.int}</div>
-                </div>
-                <div className="bg-slate-50 dark:bg-slate-900/90 border border-slate-200 dark:border-slate-800 p-2 rounded-lg">
-                  <span className="text-slate-500 dark:text-slate-400">VIT (Vitality)</span>
-                  <div className="text-base font-bold text-slate-900 dark:text-slate-100">{character.stats.vit}</div>
-                </div>
-              </div>
-
-              <div className="pt-1 text-[11px] text-slate-500 font-mono bg-slate-50 dark:bg-slate-900/50 p-2 rounded border border-slate-200 dark:border-slate-800/50">
-                Formula: HP = VIT * 10 ({maxHp}) | Mana = INT * 10 ({maxMana})
-              </div>
-            </div>
-
-            {/* Inventory / Gear Section */}
-            <div className="bg-white dark:bg-slate-950/70 border border-slate-200 dark:border-slate-800/90 rounded-xl p-3.5 space-y-2 shadow-sm dark:shadow-none transition-colors">
-              <div className="flex items-center justify-between">
-                <h4 className="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
-                  Inventory ({character.inventory.length})
-                </h4>
-              </div>
-              <div className="space-y-1.5">
-                {character.inventory.map((item, idx) => (
-                  <div
-                    key={`${item.id}-${idx}`}
-                    className="flex items-center justify-between px-2.5 py-1.5 rounded-lg bg-slate-50 dark:bg-slate-900/80 border border-slate-200 dark:border-slate-800 text-xs text-slate-700 dark:text-slate-200"
-                  >
-                    <span className="truncate min-w-0 mr-2">{item.name}</span>
-                    <span className="text-[10px] text-sky-700 dark:text-sky-400 bg-sky-100 dark:bg-sky-950/60 px-1.5 py-0.5 rounded border border-sky-300 dark:border-sky-800/40 shrink-0">
-                      {item.bonus}
-                    </span>
-                  </div>
-                ))}
-              </div>
-            </div>
+            )}
           </>
+        ) : activeTab === 'ledger' ? (
+          <div className="space-y-3">
+             {isLedgerLoading ? (
+                 <div className="text-center py-4"><Activity className="w-4 h-4 mx-auto animate-pulse text-slate-400" /></div>
+             ) : ledger.length === 0 ? (
+                <div className="text-center py-8 text-slate-400 dark:text-slate-500 space-y-2">
+                  <History className="w-6 h-6 mx-auto text-slate-300 dark:text-slate-600" />
+                  <p className="text-xs">No progression history yet.</p>
+                </div>
+             ) : (
+                <div className="relative border-l-2 border-slate-200 dark:border-slate-800 ml-2 space-y-4 pb-4">
+                  {ledger.map((entry: any) => (
+                      <div key={entry.id} className="relative pl-4">
+                          <div className="absolute -left-[5px] top-1.5 w-2 h-2 rounded-full bg-emerald-500 ring-4 ring-slate-50 dark:ring-slate-900" />
+                          <div className="text-[10px] text-slate-400 font-mono mb-0.5">
+                              {new Date(entry.timestamp).toLocaleDateString()}
+                          </div>
+                          <div className="bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 p-2.5 rounded-lg shadow-sm">
+                              <div className="text-xs font-bold text-slate-800 dark:text-slate-200 mb-1">{entry.event_name}</div>
+                              {Object.entries(entry.changes || {}).map(([stat, diff]: [string, any]) => {
+                                  const diffText = typeof diff === 'object' && diff !== null
+                                    ? (diff.delta || (diff.new !== undefined ? `-> ${diff.new}` : JSON.stringify(diff)))
+                                    : String(diff)
+                                  return (
+                                      <div key={stat} className="flex justify-between items-center text-[11px] bg-slate-50 dark:bg-slate-900/50 px-2 py-1 rounded mt-1">
+                                          <span className="text-slate-600 dark:text-slate-400">{stat}</span>
+                                          <span className="font-mono font-bold text-emerald-600 dark:text-emerald-400">{diffText}</span>
+                                      </div>
+                                  )
+                              })}
+                          </div>
+                      </div>
+                  ))}
+                </div>
+             )}
+          </div>
         ) : (
           <>
             {/* Pending AI Draft Cards */}
             <div className="space-y-3">
-              <div className="text-xs text-slate-500 dark:text-slate-400 flex items-center justify-between">
-                <span>Ambient Findings</span>
-                <span className="text-[11px] text-amber-600 dark:text-amber-400">Needs Review</span>
+              <div className="flex items-center justify-between mb-4">
+                <span className="text-xs font-semibold text-slate-700 dark:text-slate-300">Action Drafts</span>
+                <button
+                  type="button"
+                  onClick={onScanChapter}
+                  className="flex items-center gap-1.5 px-2.5 py-1.5 bg-indigo-50 dark:bg-indigo-500/20 text-indigo-700 dark:text-indigo-400 border border-indigo-200 dark:border-indigo-500/30 rounded-md hover:bg-indigo-100 dark:hover:bg-indigo-500/30 transition-colors text-xs font-medium"
+                >
+                  <Sparkles className="w-3.5 h-3.5" />
+                  Scan Chapter
+                </button>
               </div>
 
               {drafts.length === 0 ? (
                 <div className="text-center py-8 text-slate-400 dark:text-slate-500 space-y-2">
                   <ShieldAlert className="w-8 h-8 mx-auto text-slate-300 dark:text-slate-600" />
-                  <p className="text-xs">No pending stat changes detected.</p>
+                  <p className="text-xs">No pending drafts detected.</p>
                 </div>
               ) : (
                 drafts.map((draft) => (

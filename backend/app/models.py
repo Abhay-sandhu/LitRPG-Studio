@@ -7,9 +7,9 @@ class Project(Base):
     __tablename__ = 'projects'
     id = Column(Integer, primary_key=True, index=True)
     title = Column(String, index=True)
-    chapters = relationship('Chapter', back_populates='project', cascade='all, delete-orphan')
-    lore_entities = relationship('LoreEntity', back_populates='project', cascade='all, delete-orphan')
-    characters = relationship('Character', back_populates='project', cascade='all, delete-orphan')
+    chapters = relationship('Chapter', back_populates='project', cascade='all, delete-orphan', lazy='selectin')
+    lore_entities = relationship('LoreEntity', back_populates='project', cascade='all, delete-orphan', lazy='selectin')
+    characters = relationship('Character', back_populates='project', cascade='all, delete-orphan', lazy='selectin')
 
 class Chapter(Base):
     __tablename__ = 'chapters'
@@ -20,7 +20,7 @@ class Chapter(Base):
     words = Column(Integer, default=0)
     order = Column(Integer, default=0)
     project = relationship('Project', back_populates='chapters')
-    ledgers = relationship('Ledger', back_populates='chapter', cascade='all, delete-orphan')
+    ledgers = relationship('Ledger', back_populates='chapter', cascade='all, delete-orphan', lazy='selectin')
 
 class LoreEntity(Base):
     __tablename__ = 'lore_entities'
@@ -43,7 +43,7 @@ class Character(Base):
     stats = Column(JSON, default=dict) # e.g. {"Core": {"STR": 10}, "Titles": ["Dragon Slayer"]}
     formulas = Column(JSON, default=dict) # e.g. {"Max HP": "END * 10"}
     project = relationship('Project', back_populates='characters')
-    ledgers = relationship('Ledger', back_populates='character', cascade='all, delete-orphan')
+    ledgers = relationship('Ledger', back_populates='character', cascade='all, delete-orphan', lazy='selectin')
 
 class Ledger(Base):
     __tablename__ = 'ledgers'

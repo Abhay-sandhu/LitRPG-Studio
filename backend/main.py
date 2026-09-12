@@ -110,6 +110,16 @@ async def update_lore(lore_id: int, lore_update: schemas.LoreEntityUpdate, db: A
     await db.refresh(db_lore)
     return db_lore
 
+@app.delete("/api/lore/{lore_id}")
+async def delete_lore(lore_id: int, db: AsyncSession = Depends(get_db)):
+    result = await db.execute(select(models.LoreEntity).where(models.LoreEntity.id == lore_id))
+    db_lore = result.scalars().first()
+    if not db_lore:
+        raise HTTPException(status_code=404, detail="Lore entity not found")
+    await db.delete(db_lore)
+    await db.commit()
+    return {"status": "ok"}
+
 # --- Characters ---
 
 @app.get("/api/characters", response_model=list[schemas.Character])
@@ -175,24 +185,53 @@ async def create_ledger_entry(character_id: int, ledger: schemas.LedgerCreate, d
     await db.refresh(db_ledger)
     return db_ledger
 
-# --- AI Engine Endpoints (Stubbed for now) ---
+# --- AI Engine Endpoints ---
+from app.ai import extract_tactical_drafts, extract_ambient_lore
+import json
 from pydantic import BaseModel
+
+from typing import Optional
 
 class TacticalAIRequest(BaseModel):
     system_box_text: str
     surrounding_text: str
     project_id: int
+    character_id: Optional[int] = None
 
 @app.post("/api/ai/tactical")
-async def trigger_tactical_ai(request: TacticalAIRequest):
-    # TODO: Implement Gemini AI prompt for System Box parsing
-    return {"status": "pending", "drafts": []}
+async def trigger_tactical_ai(request: TacticalAIRequest, db: AsyncSession = Depends(get_db)):
+    if request.character_id:
+        result = await db.execute(select(models.Character).where(models.Character.id == request.character_id))
+        db_char = result.scalars().first()
+    else:
+        result = await db.execute(select(models.Character).where(
+            models.Character.project_id == request.project_id, 
+            models.Character.is_protagonist == True
+        ))
+        db_char = result.scalars().first()
+        
+    if not db_char:
+        raise HTTPException(status_code=404, detail="Character not found")
+        
+    drafts = extract_tactical_drafts(
+        system_box_text=request.system_box_text,
+        context_text=request.surrounding_text,
+        current_stats=db_char.stats
+    )
+    return {"status": "ok", "drafts": drafts}
 
 class AmbientAIRequest(BaseModel):
     narrative_text: str
     project_id: int
 
 @app.post("/api/ai/ambient")
-async def trigger_ambient_ai(request: AmbientAIRequest):
-    # TODO: Implement Gemini AI prompt for Lore Extraction
-    return {"status": "pending", "drafts": []}
+async def trigger_ambient_ai(request: AmbientAIRequest, db: AsyncSession = Depends(get_db)):
+    result = await db.execute(select(models.LoreEntity).where(models.LoreEntity.project_id == request.project_id))
+    lore_entities = result.scalars().all()
+    wiki_index = [{"name": l.name, "category": l.category} for l in lore_entities]
+    
+    drafts = extract_ambient_lore(
+        narrative_text=request.narrative_text,
+        wiki_index=wiki_index
+    )
+    return {"status": "ok", "drafts": drafts}
