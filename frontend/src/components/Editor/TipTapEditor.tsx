@@ -47,7 +47,7 @@ export const TipTapEditor: React.FC<TipTapEditorProps> = ({
   onContentChange,
 }) => {
   const queryClient = useQueryClient()
-  const timeoutRef = React.useRef<ReturnType<typeof setTimeout>>()
+  const timeoutRef = React.useRef<ReturnType<typeof setTimeout> | null>(null)
   
   const pendingSaveRef = React.useRef<{ id: number, content: string, words: number } | null>(null)
   

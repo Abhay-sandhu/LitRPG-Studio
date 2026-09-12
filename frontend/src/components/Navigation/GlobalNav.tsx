@@ -43,7 +43,7 @@ export const GlobalNav: React.FC<GlobalNavProps> = ({
 
       {/* Slide-out Drawer */}
       <div
-        inert={!isOpen ? "" : undefined}
+        inert={!isOpen ? true : undefined}
         className={`fixed inset-y-0 left-0 w-64 bg-white dark:bg-slate-950 border-r border-slate-200 dark:border-slate-800 z-50 transform transition-transform duration-300 ease-in-out ${
           isOpen ? 'translate-x-0' : '-translate-x-full'
         } flex flex-col`}

@@ -22,7 +22,7 @@ export default function App() {
 
   const projectId = 1 // Hardcoded for now
   
-  const { data: chapters = [], isLoading: isLoadingChapters } = useQuery({
+  const { data: chapters = [] } = useQuery({
     queryKey: ['chapters', projectId],
     queryFn: () => fetchChapters(projectId)
   })
@@ -56,7 +56,7 @@ export default function App() {
   }, [isDarkMode])
 
   const queryClient = useQueryClient()
-  const titleTimeoutRef = useRef<ReturnType<typeof setTimeout>>()
+  const titleTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const handleTitleChange = useCallback((newTitle: string) => {
     if (!activeChapterId) return
