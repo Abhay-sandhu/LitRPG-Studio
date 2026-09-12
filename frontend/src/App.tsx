@@ -97,10 +97,26 @@ export default function App() {
   // AI Pipeline State
   const [drafts, setDrafts] = useState<DraftItem[]>([])
   const aiDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const processedBlockquotesRef = useRef<Set<string>>(new Set())
+  const liveContentRef = useRef<string>("")
 
   const handleContentChangeForAI = useCallback((content: string) => {
-    // Look for system boxes
-    if (!content.includes('<blockquote')) return
+    liveContentRef.current = content
+    
+    // Extract blockquotes
+    const blockquoteMatches = Array.from(content.matchAll(/<blockquote[^>]*>([\s\S]*?)<\/blockquote>/gi))
+    if (blockquoteMatches.length === 0) return
+    
+    // Check if there are any new blockquotes we haven't processed yet
+    const newBlockquotes = blockquoteMatches
+      .map((m, idx) => {
+        const text = m[1].replace(/<[^>]+>/g, '').trim()
+        const fingerprint = `${activeChapterId}:${idx}:${text}`
+        return { text, fingerprint }
+      })
+      .filter(item => item.text.length > 0 && !processedBlockquotesRef.current.has(item.fingerprint))
+
+    if (newBlockquotes.length === 0) return
 
     if (aiDebounceRef.current) clearTimeout(aiDebounceRef.current)
     
@@ -108,9 +124,18 @@ export default function App() {
     aiDebounceRef.current = setTimeout(async () => {
       try {
         setIsAnalyzing(true)
+        
+        // Mark these blockquotes as processed immediately so we don't double-fire
+        newBlockquotes.forEach(bq => processedBlockquotesRef.current.add(bq.fingerprint))
+        
+        // Strip HTML tags down to plain text for the context
+        const cleanedContext = content.replace(/<(?!\/?blockquote\b)[^>]+>/gi, '\n')
+        // Send only the new blockquotes as the system box text
+        const systemBoxText = newBlockquotes.map(bq => bq.text).join('\n---\n')
+        
         const response = await triggerTacticalAI({
-          system_box_text: content,
-          surrounding_text: content,
+          system_box_text: systemBoxText,
+          surrounding_text: cleanedContext,
           project_id: projectId
         })
         if (response.drafts?.length > 0) {
@@ -120,6 +145,7 @@ export default function App() {
           }))
           setDrafts(prev => {
             const existingTitles = new Set(prev.map(d => d.title))
+            // We NO LONGER filter by processedDraftTitlesRef here, allowing identical stat names (e.g., "+2 STR") across different blockquotes.
             const uniqueNew = stampedDrafts.filter((d: any) => !existingTitles.has(d.title))
             return [...prev, ...uniqueNew]
           })
@@ -130,14 +156,19 @@ export default function App() {
         setIsAnalyzing(false)
       }
     }, 7000)
-  }, [projectId])
+  }, [projectId, activeChapterId])
 
   const handleScanChapter = useCallback(async () => {
     if (!activeChapter) return
     try {
       setIsAnalyzing(true)
+      
+      const contentToScan = liveContentRef.current || activeChapter.content
+      // Strip HTML tags down to plain text before sending to AI, keeping system boxes
+      const cleanedText = contentToScan.replace(/<(?!\/?blockquote\b)[^>]+>/gi, '\n')
+      
       const response = await triggerAmbientAI({
-        narrative_text: activeChapter.content,
+        narrative_text: cleanedText,
         project_id: projectId
       })
       if (response.drafts?.length > 0) {
@@ -159,6 +190,8 @@ export default function App() {
     }
   }, [activeChapter, projectId])
 
+  const [saveStatus, setSaveStatus] = useState<'synced' | 'saving' | 'error'>('synced')
+
   return (
     <div className="h-screen w-screen flex flex-col overflow-hidden font-sans bg-slate-50 text-slate-900 dark:bg-slate-950 dark:text-slate-100 transition-colors duration-200">
       <GlobalNav
@@ -175,42 +208,42 @@ export default function App() {
         onChangeTitle={currentView === 'editor' ? handleTitleChange : undefined}
         isAnalyzing={isAnalyzing}
         isDarkMode={isDarkMode}
+        saveStatus={saveStatus}
         onToggleTheme={toggleTheme}
         onOpenNav={openNav}
       />
 
       {/* Main Workspace Area based on selected View */}
-      {currentView === 'editor' && (
-        <div className="flex-1 flex overflow-hidden">
-          {/* Left Sidebar: Chapters & Local Story Bible */}
-          <LeftSidebar
-            collapsed={leftCollapsed}
-            onToggleCollapse={toggleLeftCollapse}
-            chapters={chapters}
-            activeChapterId={activeChapterId ?? undefined}
-            onSelectChapter={setActiveChapterId}
-          />
+      <div className={`flex-1 flex overflow-hidden ${currentView === 'editor' ? '' : 'hidden'}`}>
+        {/* Left Sidebar: Chapters & Local Story Bible */}
+        <LeftSidebar
+          collapsed={leftCollapsed}
+          onToggleCollapse={toggleLeftCollapse}
+          chapters={chapters}
+          activeChapterId={activeChapterId ?? undefined}
+          onSelectChapter={setActiveChapterId}
+        />
 
-          {/* Center Canvas: TipTap Rich Text Editor */}
-          <TipTapEditor
-            key={activeChapterId ?? 'empty'}
-            chapterId={activeChapterId ?? undefined}
-            initialContent={activeChapter?.content || ''}
-            onWordCountChange={setWordCount}
-            onContentChange={handleContentChangeForAI}
-          />
+        {/* Center Canvas: TipTap Rich Text Editor */}
+        <TipTapEditor
+          key={activeChapterId ?? 'empty'}
+          chapterId={activeChapterId ?? undefined}
+          initialContent={activeChapter?.content || ''}
+          onWordCountChange={setWordCount}
+          onContentChange={handleContentChangeForAI}
+          onSaveStatusChange={setSaveStatus}
+        />
 
-          {/* Right Inspector: Live Character Sheet & AI Draft Queue */}
-          <RightInspector
-            collapsed={rightCollapsed}
-            onToggleCollapse={toggleRightCollapse}
-            drafts={drafts}
-            setDrafts={setDrafts}
-            onScanChapter={handleScanChapter}
-            activeChapterId={activeChapterId ?? undefined}
-          />
-        </div>
-      )}
+        {/* Right Inspector: Live Character Sheet & AI Draft Queue */}
+        <RightInspector
+          collapsed={rightCollapsed}
+          onToggleCollapse={toggleRightCollapse}
+          drafts={drafts}
+          setDrafts={setDrafts}
+          onScanChapter={handleScanChapter}
+          activeChapterId={activeChapterId ?? undefined}
+        />
+      </div>
 
       {currentView === 'projects' && <ProjectsView />}
       {currentView === 'bible' && <BibleView />}

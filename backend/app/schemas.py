@@ -62,6 +62,10 @@ class Ledger(LedgerBase):
     class Config:
         from_attributes = True
 
+class AcceptDraftRequest(BaseModel):
+    character_stats: Dict[str, Any]
+    ledger: LedgerCreate
+
 class CharacterBase(BaseModel):
     name: str
     is_protagonist: Optional[bool] = False
@@ -91,6 +95,11 @@ class ProjectBase(BaseModel):
 
 class ProjectCreate(ProjectBase):
     pass
+
+class ProjectListItem(ProjectBase):
+    id: int
+    class Config:
+        from_attributes = True
 
 class Project(ProjectBase):
     id: int

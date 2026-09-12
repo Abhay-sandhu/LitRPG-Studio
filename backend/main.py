@@ -3,6 +3,10 @@ from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 from contextlib import asynccontextmanager
+import os
+from dotenv import load_dotenv
+
+load_dotenv()
 
 from app import models, schemas
 from app.database import engine, Base, get_db
@@ -17,15 +21,17 @@ app = FastAPI(title="ChronicleRPG Studio API", lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173"],
+    allow_origins=["http://localhost:5173", "http://localhost:5174", "http://127.0.0.1:5173", "http://127.0.0.1:5174"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-@app.get("/api/projects", response_model=list[schemas.Project])
+from sqlalchemy.orm import noload
+
+@app.get("/api/projects", response_model=list[schemas.ProjectListItem])
 async def get_projects(db: AsyncSession = Depends(get_db)):
-    result = await db.execute(select(models.Project))
+    result = await db.execute(select(models.Project).options(noload('*')))
     return result.scalars().all()
 
 @app.post("/api/projects", response_model=schemas.Project)
@@ -185,6 +191,26 @@ async def create_ledger_entry(character_id: int, ledger: schemas.LedgerCreate, d
     await db.refresh(db_ledger)
     return db_ledger
 
+@app.post("/api/characters/{character_id}/accept-draft")
+async def accept_action_draft(character_id: int, payload: schemas.AcceptDraftRequest, db: AsyncSession = Depends(get_db)):
+    # Run in a single transaction
+    async with db.begin():
+        # Update Character
+        result = await db.execute(select(models.Character).where(models.Character.id == character_id))
+        db_character = result.scalars().first()
+        if not db_character:
+            raise HTTPException(status_code=404, detail="Character not found")
+        
+        db_character.stats = payload.character_stats
+        
+        # Insert Ledger
+        db_ledger = models.Ledger(character_id=character_id, **payload.ledger.model_dump())
+        db.add(db_ledger)
+        
+    # Transaction auto-commits upon exit of `async with db.begin()` block
+    await db.refresh(db_ledger)
+    return {"status": "ok", "ledger_id": db_ledger.id}
+
 # --- AI Engine Endpoints ---
 from app.ai import extract_tactical_drafts, extract_ambient_lore
 import json
@@ -200,16 +226,25 @@ class TacticalAIRequest(BaseModel):
 
 @app.post("/api/ai/tactical")
 async def trigger_tactical_ai(request: TacticalAIRequest, db: AsyncSession = Depends(get_db)):
+    db_char = None
     if request.character_id:
         result = await db.execute(select(models.Character).where(models.Character.id == request.character_id))
         db_char = result.scalars().first()
     else:
+        # Primary Fallback: Protagonist
         result = await db.execute(select(models.Character).where(
             models.Character.project_id == request.project_id, 
             models.Character.is_protagonist == True
         ))
         db_char = result.scalars().first()
         
+        # Secondary Fallback: Any character in project
+        if not db_char:
+            result = await db.execute(select(models.Character).where(
+                models.Character.project_id == request.project_id
+            ))
+            db_char = result.scalars().first()
+            
     if not db_char:
         raise HTTPException(status_code=404, detail="Character not found")
         

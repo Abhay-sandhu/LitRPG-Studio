@@ -1,7 +1,7 @@
 from sqlalchemy import Column, Integer, String, Text, ForeignKey, JSON, DateTime, Boolean
 from sqlalchemy.orm import relationship
 from .database import Base
-from datetime import datetime
+from datetime import datetime, timezone
 
 class Project(Base):
     __tablename__ = 'projects'
@@ -53,6 +53,6 @@ class Ledger(Base):
     event_name = Column(String)
     changes = Column(JSON, default=dict) # e.g. {"STR": {"old": 10, "new": 12, "delta": "+2"}}
     source_type = Column(String, default="System Box") # 'System Box', 'Manual', 'Initial'
-    timestamp = Column(DateTime, default=datetime.utcnow)
+    timestamp = Column(DateTime, default=lambda: datetime.now(timezone.utc))
     character = relationship('Character', back_populates='ledgers')
     chapter = relationship('Chapter', back_populates='ledgers')

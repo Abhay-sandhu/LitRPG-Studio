@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react'
+import React, { useEffect, useRef } from 'react'
 import { useEditor, EditorContent } from '@tiptap/react'
 import StarterKit from '@tiptap/starter-kit'
 import Placeholder from '@tiptap/extension-placeholder'
@@ -15,6 +15,7 @@ interface TipTapEditorProps {
   initialContent?: string
   onWordCountChange?: (count: number) => void
   onContentChange?: (content: string) => void
+  onSaveStatusChange?: (status: 'synced' | 'saving' | 'error') => void
 }
 
 const TIPTAP_EXTENSIONS = [
@@ -45,44 +46,53 @@ export const TipTapEditor: React.FC<TipTapEditorProps> = ({
   initialContent = '',
   onWordCountChange,
   onContentChange,
+  onSaveStatusChange
 }) => {
   const queryClient = useQueryClient()
-  const timeoutRef = React.useRef<ReturnType<typeof setTimeout> | null>(null)
-  
-  const pendingSaveRef = React.useRef<{ id: number, content: string, words: number } | null>(null)
-  
+  const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const pendingSaveRef = useRef<{ id: number; content: string; words: number } | null>(null)
+
   useEffect(() => {
     return () => {
       if (timeoutRef.current) {
         clearTimeout(timeoutRef.current)
-        if (pendingSaveRef.current) {
-          const savedData = pendingSaveRef.current
-          
-          // Optimistically update cache instantly to prevent rapid double-switch bug
-          queryClient.setQueriesData({ queryKey: ['chapters'] }, (old: any) => {
-            if (!old) return old
-            return old.map((c: any) => 
-              c.id === savedData.id 
-                ? { ...c, content: savedData.content, words: savedData.words } 
-                : c
-            )
-          })
+      }
+      
+      const savedData = pendingSaveRef.current
+      if (savedData) {
+        // Optimistically update cache instantly to prevent rapid double-switch bug
+        queryClient.setQueriesData({ queryKey: ['chapters'] }, (old: any) => {
+          if (!old) return old
+          return old.map((c: any) => 
+            c.id === savedData.id 
+              ? { ...c, content: savedData.content, words: savedData.words } 
+              : c
+          )
+        })
 
-          updateChapter(savedData.id, {
-            content: savedData.content,
-            words: savedData.words
-          }).then(() => {
-            queryClient.invalidateQueries({ queryKey: ['chapters'] })
-          })
-        }
+        updateChapter(savedData.id, {
+          content: savedData.content,
+          words: savedData.words
+        }).then(() => {
+          queryClient.invalidateQueries({ queryKey: ['chapters'] })
+        }).catch(err => {
+          console.error("Cleanup save failed:", err)
+        })
       }
     }
   }, [queryClient])
   
   const mutation = useMutation({
     mutationFn: (vars: { id: number, payload: any }) => updateChapter(vars.id, vars.payload),
+    onMutate: () => {
+      onSaveStatusChange?.('saving')
+    },
     onSuccess: () => {
+      onSaveStatusChange?.('synced')
       queryClient.invalidateQueries({ queryKey: ['chapters'] })
+    },
+    onError: () => {
+      onSaveStatusChange?.('error')
     }
   })
 
@@ -98,6 +108,7 @@ export const TipTapEditor: React.FC<TipTapEditorProps> = ({
 
       if (chapterId) {
         pendingSaveRef.current = { id: chapterId, content, words }
+        onSaveStatusChange?.('saving')
         
         if (timeoutRef.current) clearTimeout(timeoutRef.current)
         timeoutRef.current = setTimeout(() => {

@@ -12,7 +12,7 @@ import {
   Zap,
 } from 'lucide-react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { fetchCharacters, fetchCharacterLedger, acceptActionDraft } from '../../api'
+import { fetchCharacters, fetchCharacterLedger, acceptActionDraft, createLore } from '../../api'
 
 export interface DraftItem {
   id: number
@@ -68,45 +68,127 @@ export const RightInspector: React.FC<RightInspectorProps> = React.memo(({
 
   const handleAccept = async (id: number) => {
     if (processedDrafts.current.has(id)) return
-    processedDrafts.current.add(id)
 
     const draft = drafts.find((d) => d.id === id)
     if (!draft || !protagonist) return
 
+    if (draft.changes && typeof draft.changes === 'object' && Object.keys(draft.changes).length > 0 && !activeChapterId) {
+        alert("Cannot accept draft: No active chapter found. Please ensure you are viewing a chapter.")
+        return
+    }
+
+    processedDrafts.current.add(id)
+
     try {
-      const updatedStats = { ...protagonist.stats }
-      
-      // If it's a stat change, merge it safely based on draft.changes structure
-      if (draft.changes && typeof draft.changes === 'object') {
+      let acceptedSomething = false
+
+      // 1. Process World-Building Lore if present
+      if (draft.lore_entity) {
+        await createLore({
+          project_id: projectId,
+          name: draft.lore_entity.name || draft.title,
+          category: draft.lore_entity.category || 'Concept',
+          attributes: draft.lore_entity.attributes || {},
+          description: draft.lore_entity.description || draft.desc,
+          is_promoted: false
+        })
+        queryClient.invalidateQueries({ queryKey: ['lore', projectId] })
+        acceptedSomething = true
+      }
+
+      // 2. Process Character Stat/Item changes if present
+      if (draft.changes && typeof draft.changes === 'object' && Object.keys(draft.changes).length > 0) {
+        const updatedStats = { ...protagonist.stats }
+        
         Object.entries(draft.changes).forEach(([statKey, changeVal]: [string, any]) => {
+          // A. Handle numeric / scalar stat changes
           if (changeVal.new !== undefined) {
             let nestedFound = false
             for (const [category, attributes] of Object.entries(updatedStats)) {
               if (typeof attributes === 'object' && attributes !== null && !Array.isArray(attributes) && statKey in attributes) {
-                updatedStats[category] = { ...attributes, [statKey]: changeVal.new }
+                // Prevent hallucination from overwriting an array with a scalar
+                if (!Array.isArray((attributes as any)[statKey])) {
+                    updatedStats[category] = { ...attributes, [statKey]: changeVal.new }
+                } else {
+                    console.warn(`Type safety: Refused to overwrite array ${statKey} with scalar ${changeVal.new}`)
+                }
                 nestedFound = true
                 break
               }
             }
             if (!nestedFound) {
-              updatedStats[statKey] = changeVal.new
+              // Prevent hallucination from overwriting a root array with a scalar
+              if (updatedStats[statKey] !== undefined && Array.isArray(updatedStats[statKey])) {
+                  console.warn(`Type safety: Refused to overwrite root array ${statKey} with scalar ${changeVal.new}`)
+              } else {
+                  updatedStats[statKey] = changeVal.new
+              }
+            }
+          }
+          
+          // B. Handle list additions (Skills, Inventory, Titles, etc.)
+          if (changeVal.append !== undefined) {
+            let appended = false
+            
+            // Check root first
+            if (updatedStats[statKey] !== undefined) {
+                if (Array.isArray(updatedStats[statKey])) {
+                    if (!updatedStats[statKey].includes(changeVal.append)) {
+                        updatedStats[statKey] = [...updatedStats[statKey], changeVal.append]
+                    }
+                    appended = true
+                } else {
+                    console.warn(`Type safety: Refused to append to non-array root scalar ${statKey}`)
+                    appended = true // Mark as handled to prevent fallback overwrite
+                }
+            }
+            
+            // If not found at root, check nested categories
+            if (!appended) {
+              for (const [category, attributes] of Object.entries(updatedStats)) {
+                if (typeof attributes === 'object' && attributes !== null && statKey in attributes) {
+                  if (Array.isArray((attributes as any)[statKey])) {
+                      const existing = (attributes as any)[statKey]
+                      if (!existing.includes(changeVal.append)) {
+                          updatedStats[category] = {
+                            ...attributes,
+                            [statKey]: [...existing, changeVal.append]
+                          }
+                      }
+                  } else {
+                      console.warn(`Type safety: Refused to append to non-array nested scalar ${statKey}`)
+                  }
+                  appended = true
+                  break
+                }
+              }
+            }
+            
+            // If completely new, safely initialize it as an array
+            if (!appended) {
+              updatedStats[statKey] = [changeVal.append]
             }
           }
         })
+
+        const ledgerEntry = {
+          character_id: protagonist.id,
+          chapter_id: activeChapterId!,
+          event_name: draft.title,
+          changes: draft.changes || {},
+          source_type: "AI Draft"
+        }
+
+        await acceptActionDraft(protagonist.id, { stats: updatedStats }, ledgerEntry)
+        
+        queryClient.invalidateQueries({ queryKey: ['characters'] })
+        queryClient.invalidateQueries({ queryKey: ['ledger', protagonist.id] })
+        acceptedSomething = true
       }
 
-      const ledgerEntry = {
-        character_id: protagonist.id,
-        chapter_id: activeChapterId || 1,
-        event_name: draft.title,
-        changes: draft.changes || {},
-        source_type: "AI Draft"
+      if (!acceptedSomething) {
+        console.warn("AI draft had no valid lore_entity or changes attached.")
       }
-
-      await acceptActionDraft(protagonist.id, { stats: updatedStats }, ledgerEntry)
-      
-      queryClient.invalidateQueries({ queryKey: ['characters'] })
-      queryClient.invalidateQueries({ queryKey: ['ledger', protagonist.id] })
       
       setDrafts((prev) => prev.filter((d) => d.id !== id))
     } catch (err) {
@@ -264,7 +346,9 @@ export const RightInspector: React.FC<RightInspectorProps> = React.memo(({
                             {Object.entries(attributes).map(([key, val]: [string, any]) => (
                                 <div key={key} className="bg-slate-50 dark:bg-slate-900/90 border border-slate-200 dark:border-slate-800 p-2 rounded-lg flex flex-col">
                                     <span className="text-[10px] text-slate-500 dark:text-slate-400 uppercase tracking-wider">{key}</span>
-                                    <span className="text-base font-bold text-slate-900 dark:text-slate-100">{val}</span>
+                                    <span className="text-base font-bold text-slate-900 dark:text-slate-100">
+                                        {typeof val === 'object' && val !== null ? JSON.stringify(val) : String(val)}
+                                    </span>
                                 </div>
                             ))}
                         </div>
@@ -306,7 +390,7 @@ export const RightInspector: React.FC<RightInspectorProps> = React.memo(({
                               <div className="text-xs font-bold text-slate-800 dark:text-slate-200 mb-1">{entry.event_name}</div>
                               {Object.entries(entry.changes || {}).map(([stat, diff]: [string, any]) => {
                                   const diffText = typeof diff === 'object' && diff !== null
-                                    ? (diff.delta || (diff.new !== undefined ? `-> ${diff.new}` : JSON.stringify(diff)))
+                                    ? (diff.delta || (diff.append ? `+ ${diff.append}` : (diff.new !== undefined ? `-> ${diff.new}` : JSON.stringify(diff))))
                                     : String(diff)
                                   return (
                                       <div key={stat} className="flex justify-between items-center text-[11px] bg-slate-50 dark:bg-slate-900/50 px-2 py-1 rounded mt-1">

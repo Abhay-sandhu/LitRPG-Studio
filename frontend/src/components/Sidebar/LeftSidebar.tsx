@@ -52,9 +52,12 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = React.memo(({
     queryFn: () => fetchLore(1)
   })
 
+  const projectId = 1 // Hardcoded for now
+  
   const createChapterMutation = useMutation({
-    mutationFn: () => createChapter({ project_id: 1, title: 'Untitled Chapter', words: 0, order: chapters.length + 1 }),
+    mutationFn: () => createChapter({ project_id: projectId, title: 'Untitled Chapter', words: 0, order: chapters.length + 1 }),
     onSuccess: (newChapter) => {
+      queryClient.setQueryData(['chapters', projectId], (old: any) => old ? [...old, newChapter] : [newChapter])
       queryClient.invalidateQueries({ queryKey: ['chapters'] })
       onSelectChapter(newChapter.id)
     }
@@ -206,6 +209,7 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = React.memo(({
                 type="button"
                 className="hover:text-sky-600 dark:hover:text-sky-400 transition-colors"
                 title="Add Lore Entry"
+                onClick={() => alert("Create new Lore Entry modal coming soon!")}
               >
                 <Plus className="w-3.5 h-3.5" />
               </button>
@@ -218,6 +222,7 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = React.memo(({
                 <button
                   key={`${item.id}-${idx}`}
                   type="button"
+                  onClick={() => alert(`View details for: ${item.name}`)}
                   className="w-full flex items-center justify-between px-2.5 py-1.5 rounded-md text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800/50 cursor-pointer transition-colors"
                 >
                   <div className="flex items-center space-x-2 truncate min-w-0">
