@@ -64,7 +64,7 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = React.memo(({
   })
 
   const filteredChapters = chapters.filter((ch) =>
-    ch.title.toLowerCase().includes(searchQuery.toLowerCase())
+    ch.title?.toLowerCase().includes(searchQuery.toLowerCase())
   )
 
   const filteredEntities = bibleEntities.filter((item: any) =>

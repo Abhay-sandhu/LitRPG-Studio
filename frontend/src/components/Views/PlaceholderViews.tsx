@@ -1,5 +1,5 @@
 import React from 'react'
-import { Library, BookOpen, LineChart, Settings, Construction } from 'lucide-react'
+import { Library, LineChart, Settings, Construction } from 'lucide-react'
 
 interface PlaceholderViewProps {
   title: string
@@ -32,13 +32,7 @@ export const ProjectsView = () => (
   />
 )
 
-export const BibleView = () => (
-  <PlaceholderView
-    title="Global Story Bible"
-    icon={BookOpen}
-    description="The central database for all your characters, items, locations, and magical laws. Configure complex leveling formulas and character progression graphs here."
-  />
-)
+
 
 export const AnalyticsView = () => (
   <PlaceholderView

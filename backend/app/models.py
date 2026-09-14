@@ -33,6 +33,17 @@ class LoreEntity(Base):
     is_promoted = Column(Boolean, default=False)
     project = relationship('Project', back_populates='lore_entities')
 
+class LoreRelationship(Base):
+    __tablename__ = 'lore_relationships'
+    id = Column(Integer, primary_key=True, index=True)
+    project_id = Column(Integer, ForeignKey('projects.id', ondelete="CASCADE"))
+    source_id = Column(Integer, ForeignKey('lore_entities.id', ondelete="CASCADE"))
+    target_id = Column(Integer, ForeignKey('lore_entities.id', ondelete="CASCADE"))
+    relationship_type = Column(String) # e.g. 'wields', 'located in', 'enemy of'
+    
+    source = relationship('LoreEntity', foreign_keys=[source_id])
+    target = relationship('LoreEntity', foreign_keys=[target_id])
+
 class Character(Base):
     __tablename__ = 'characters'
     id = Column(Integer, primary_key=True, index=True)

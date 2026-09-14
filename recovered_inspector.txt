@@ -1,0 +1,208 @@
+Created At: 2026-09-13T21:59:32+05:30
+Completed At: 2026-09-13T21:59:32+05:30
+File Path: `file:///c:/Users/abhay/antigravity_projects/P-1.1/frontend/src/components/Inspector/RightInspector.tsx`
+Total Lines: 695
+Total Bytes: 34894
+Showing lines 380 to 430
+The following code has been modified to include a line number before every line, in the format: <line_number>: <original_line>. Please note that any changes targeting the original code should remove the line number, colon, and leading space.
+380: 
+381:         <div className="flex bg-slate-200/50 dark:bg-slate-950/70 p-0.5 rounded-lg border border-slate-200 dark:border-slate-800/80 w-full text-[11px]">
+382:           <button
+383:             type="button"
+384:             onClick={() => setActiveTab('sheet')}
+385:             className={`flex-1 py-1 rounded-md font-medium transition-colors ${
+386:               activeTab === 'sheet'
+387:                 ? 'bg-white dark:bg-sky-500/20 text-sky-700 dark:text-sky-300 border border-slate-200 dark:border-sky-500/30 shadow-sm'
+388:                 : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
+389:             }`}
+390:           >
+391:             Sheet
+392:           </button>
+393:           <button
+394:             type="button"
+395:             onClick={() => setActiveTab('ledger')}
+396:             className={`flex-1 py-1 rounded-md font-medium transition-colors ${
+397:               activeTab === 'ledger'
+398:                 ? 'bg-white dark:bg-emerald-500/20 text-emerald-700 dark:text-emerald-300 border border-slate-200 dark:border-emerald-500/30 shadow-sm'
+399:                 : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
+400:             }`}
+401:           >
+402:             Ledger
+403:           </button>
+404:           <button
+405:             type="button"
+406:             onClick={() => setActiveTab('drafts')}
+407:             className={`flex-1 py-1 rounded-md font-medium transition-colors flex items-center justify-center gap-1 ${
+408:               activeTab === 'drafts'
+409:                 ? 'bg-white dark:bg-amber-500/20 text-amber-700 dark:text-amber-300 border border-slate-200 dark:border-amber-500/30 shadow-sm'
+410:                 : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
+411:             }`}
+412:           >
+413:             <span>Drafts</span>
+414:             {drafts.length > 0 && (
+415:               <span className="w-3.5 h-3.5 rounded-full bg-amber-100 dark:bg-amber-500/30 text-amber-700 dark:text-amber-300 text-[9px] font-bold flex items-center justify-center border border-amber-200 dark:border-amber-500/50">
+416:                 {drafts.length}
+417:               </span>
+418:             )}
+419:           </button>
+420:         </div>
+421:       </div>
+422: 
+423:       <div className="flex-1 overflow-y-auto p-4 space-y-4">
+424:         {isCharsLoading ? (
+425:             <div className="text-center py-8 text-slate-400"><Activity className="w-6 h-6 mx-auto animate-pulse" /></div>
+426:         ) : !protagonist ? (
+427:             <div className="text-center py-8 text-slate-400 text-xs">No character data available.</div>
+428:         ) : activeTab === 'sheet' ? (
+429:           <>
+430:             {/* Identity Card */}
+The above content does NOT show the entire file contents. If you need to view any lines of the file which were not shown to complete your task, call this tool again to view those lines.
+
+
+Created At: 2026-09-13T21:59:38+05:30
+Completed At: 2026-09-13T21:59:38+05:30
+File Path: `file:///c:/Users/abhay/antigravity_projects/P-1.1/frontend/src/components/Inspector/RightInspector.tsx`
+Total Lines: 695
+Total Bytes: 34894
+Showing lines 550 to 600
+The following code has been modified to include a line number before every line, in the format: <line_number>: <original_line>. Please note that any changes targeting the original code should remove the line number, colon, and leading space.
+550:                             <span className="text-slate-400">=</span>
+551:                             <input
+552:                                 value={newFormulaValue}
+553:                                 onChange={(e) => setNewFormulaValue(e.target.value)}
+554:                                 placeholder="Formula"
+555:                                 className="flex-[2] bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded px-2 py-1 text-xs font-mono"
+556:                                 onKeyDown={(e) => {
+557:                                     if (e.key === 'Enter' && newFormulaKey && newFormulaValue) {
+558:                                         setEditedFormulaRows(prev => [...prev, { id: Math.random().toString(36).substr(2, 9), key: newFormulaKey, value: newFormulaValue }])
+559:                                         setNewFormulaKey("")
+560:                                         setNewFormulaValue("")
+561:                                     }
+562:                                 }}
+563:                             />
+564:                             <button
+565:                                 onClick={() => {
+566:                                     if (newFormulaKey && newFormulaValue) {
+567:                                         setEditedFormulaRows(prev => [...prev, { id: Math.random().toString(36).substr(2, 9), key: newFormulaKey, value: newFormulaValue }])
+568:                                         setNewFormulaKey("")
+569:                                         setNewFormulaValue("")
+570:                                     }
+571:                                 }}
+572:                                 className="text-emerald-600 hover:text-emerald-700 p-1"
+573:                                 title="Add Formula"
+574:                             >
+575:                                 <Check className="w-3.5 h-3.5" />
+576:                             </button>
+577:                         </div>
+578:                     </div>
+579:                 ) : (
+580:                     protagonist.formulas && Object.keys(protagonist.formulas).length > 0 ? (
+581:                         <div className="space-y-1">
+582:                             {Object.entries(protagonist.formulas).map(([key, formula]: [string, any]) => (
+583:                                 <div key={key} className="text-[10px] text-slate-500 font-mono bg-slate-50 dark:bg-slate-900/50 p-2 rounded border border-slate-200 dark:border-slate-800/50 flex justify-between">
+584:                                     <span className="font-semibold">{key}</span>
+585:                                     <span>= {formula}</span>
+586:                                 </div>
+587:                             ))}
+588:                         </div>
+589:                     ) : (
+590:                         <div className="text-[10px] text-slate-400 italic py-1">No formulas defined.</div>
+591:                     )
+592:                 )}
+593:             </div>
+594:           </>
+595:         ) : activeTab === 'ledger' ? (
+596:           <div className="space-y-3">
+597:              {isLedgerLoading ? (
+598:                  <div className="text-center py-4"><Activity className="w-4 h-4 mx-auto animate-pulse text-slate-400" /></div>
+599:              ) : ledger.length === 0 ? (
+600:                 <div className="text-center py-8 text-slate-400 dark:text-slate-500 space-y-2">
+The above content does NOT show the entire file contents. If you need to view any lines of the file which were not shown to complete your task, call this tool again to view those lines.
+
+
+Created At: 2026-09-13T21:59:43+05:30
+Completed At: 2026-09-13T21:59:43+05:30
+File Path: `file:///c:/Users/abhay/antigravity_projects/P-1.1/frontend/src/components/Inspector/RightInspector.tsx`
+Total Lines: 695
+Total Bytes: 34894
+Showing lines 620 to 695
+The following code has been modified to include a line number before every line, in the format: <line_number>: <original_line>. Please note that any changes targeting the original code should remove the line number, colon, and leading space.
+620:                                           <span className="text-slate-600 dark:text-slate-400">{stat}</span>
+621:                                           <span className="font-mono font-bold text-emerald-600 dark:text-emerald-400">{diffText}</span>
+622:                                       </div>
+623:                                   )
+624:                               })}
+625:                           </div>
+626:                       </div>
+627:                   ))}
+628:                 </div>
+629:              )}
+630:           </div>
+631:         ) : (
+632:           <>
+633:             {/* Pending AI Draft Cards */}
+634:             <div className="space-y-3">
+635:               <div className="flex items-center justify-between mb-4">
+636:                 <span className="text-xs font-semibold text-slate-700 dark:text-slate-300">Action Drafts</span>
+637:                 <button
+638:                   type="button"
+639:                   onClick={onScanChapter}
+640:                   className="flex items-center gap-1.5 px-2.5 py-1.5 bg-indigo-50 dark:bg-indigo-500/20 text-indigo-700 dark:text-indigo-400 border border-indigo-200 dark:border-indigo-500/30 rounded-md hover:bg-indigo-100 dark:hover:bg-indigo-500/30 transition-colors text-xs font-medium"
+641:                 >
+642:                   <Sparkles className="w-3.5 h-3.5" />
+643:                   Scan Chapter
+644:                 </button>
+645:               </div>
+646: 
+647:               {drafts.length === 0 ? (
+648:                 <div className="text-center py-8 text-slate-400 dark:text-slate-500 space-y-2">
+649:                   <ShieldAlert className="w-8 h-8 mx-auto text-slate-300 dark:text-slate-600" />
+650:                   <p className="text-xs">No pending drafts detected.</p>
+651:                 </div>
+652:               ) : (
+653:                 drafts.map((draft) => (
+654:                   <div
+655:                     key={draft.id}
+656:                     className="bg-white dark:bg-slate-950 border border-amber-300 dark:border-amber-500/30 rounded-xl p-3 space-y-2 shadow-sm hover:border-amber-400 dark:hover:border-amber-500/50 transition-colors"
+657:                   >
+658:                     <div className="flex items-center justify-between">
+659:                       <span className="text-[10px] uppercase font-bold tracking-wider px-1.5 py-0.5 rounded bg-amber-100 dark:bg-amber-500/10 text-amber-700 dark:text-amber-400 border border-amber-300 dark:border-amber-500/20">
+660:                         {draft.title}
+661:                       </span>
+662:                     </div>
+663: 
+664:                     <p className="text-xs font-medium text-slate-800 dark:text-slate-200">{draft.desc}</p>
+665:                     <p className="text-[11px] text-slate-500 italic">{draft.context}</p>
+666: 
+667:                     <div className="flex items-center gap-2 pt-1 border-t border-slate-100 dark:border-slate-800/60">
+668:                       <button
+669:                         type="button"
+670:                         onClick={() => handleAccept(draft.id)}
+671:                         className="flex-1 flex items-center justify-center gap-1 py-1 px-2 rounded-md bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800/50 hover:bg-emerald-100 dark:hover:bg-emerald-900/60 text-xs font-medium transition-colors"
+672:                       >
+673:                         <Check className="w-3.5 h-3.5" />
+674:                         <span>Accept</span>
+675:                       </button>
+676:                       <button
+677:                         type="button"
+678:                         onClick={() => handleDismiss(draft.id)}
+679:                         className="flex-1 flex items-center justify-center gap-1 py-1 px-2 rounded-md bg-slate-50 dark:bg-slate-900 text-slate-600 dark:text-slate-400 border border-slate-200 dark:border-slate-800 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-slate-200 text-xs font-medium transition-colors"
+680:                       >
+681:                         <X className="w-3.5 h-3.5" />
+682:                         <span>Dismiss</span>
+683:                       </button>
+684:                     </div>
+685:                   </div>
+686:                 ))
+687:               )}
+688:             </div>
+689:           </>
+690:         )}
+691:       </div>
+692:     </aside>
+693:   )
+694: })
+695: 
+The above content does NOT show the entire file contents. If you need to view any lines of the file which were not shown to complete your task, call this tool again to view those lines.
+
+

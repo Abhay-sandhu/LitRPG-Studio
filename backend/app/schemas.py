@@ -46,6 +46,20 @@ class LoreEntity(LoreEntityBase):
     class Config:
         from_attributes = True
 
+class LoreRelationshipBase(BaseModel):
+    source_id: int
+    target_id: int
+    relationship_type: str
+
+class LoreRelationshipCreate(LoreRelationshipBase):
+    project_id: int
+
+class LoreRelationship(LoreRelationshipBase):
+    id: int
+    project_id: int
+    class Config:
+        from_attributes = True
+
 class LedgerBase(BaseModel):
     event_name: str
     changes: Dict[str, Any] = {}
@@ -64,6 +78,7 @@ class Ledger(LedgerBase):
 
 class AcceptDraftRequest(BaseModel):
     character_stats: Dict[str, Any]
+    character_formulas: Optional[Dict[str, Any]] = None
     ledger: LedgerCreate
 
 class CharacterBase(BaseModel):

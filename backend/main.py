@@ -2,6 +2,8 @@ from fastapi import FastAPI, Depends, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
+from pydantic import BaseModel
+from typing import Optional
 from contextlib import asynccontextmanager
 import os
 from dotenv import load_dotenv
@@ -126,6 +128,70 @@ async def delete_lore(lore_id: int, db: AsyncSession = Depends(get_db)):
     await db.commit()
     return {"status": "ok"}
 
+# --- Lore Relationships ---
+
+class BulkLoreRelationshipRequest(BaseModel):
+    project_id: int
+    relationships: list[dict] # {"source": str, "target": str, "type": str}
+
+@app.get("/api/lore-relationships", response_model=list[schemas.LoreRelationship])
+async def get_lore_relationships(project_id: int, db: AsyncSession = Depends(get_db)):
+    result = await db.execute(select(models.LoreRelationship).where(models.LoreRelationship.project_id == project_id))
+    return result.scalars().all()
+
+@app.post("/api/lore-relationships/bulk")
+async def bulk_create_lore_relationships(payload: BulkLoreRelationshipRequest, db: AsyncSession = Depends(get_db)):
+    # 1. Fetch all lore entities for the project to map names to IDs
+    result = await db.execute(select(models.LoreEntity).where(models.LoreEntity.project_id == payload.project_id))
+    entities = result.scalars().all()
+    name_to_id = {e.name.lower(): e.id for e in entities}
+    # Fetch existing relationships to prevent duplicates
+    existing_rels = await db.execute(
+        select(models.LoreRelationship).where(models.LoreRelationship.project_id == payload.project_id)
+    )
+    existing_set = {(r.source_id, r.target_id, r.relationship_type.strip().lower()) for r in existing_rels.scalars().all()}
+    
+    created_count = 0
+    for rel in payload.relationships:
+        source_name = rel['source']
+        target_name = rel['target']
+        
+        source_id = name_to_id.get(source_name.lower())
+        if not source_id:
+            new_source = models.LoreEntity(project_id=payload.project_id, name=source_name, category='Concept')
+            db.add(new_source)
+            await db.flush()
+            source_id = new_source.id
+            name_to_id[source_name.lower()] = source_id
+            
+        target_id = name_to_id.get(target_name.lower())
+        if not target_id:
+            new_target = models.LoreEntity(project_id=payload.project_id, name=target_name, category='Concept')
+            db.add(new_target)
+            await db.flush()
+            target_id = new_target.id
+            name_to_id[target_name.lower()] = target_id
+            
+        if source_id and target_id:
+            rel_tuple = (source_id, target_id, rel['type'].strip().lower())
+            if rel_tuple in existing_set:
+                continue
+            existing_set.add(rel_tuple)
+            
+            # Create relationship
+            db_rel = models.LoreRelationship(
+                project_id=payload.project_id,
+                source_id=source_id,
+                target_id=target_id,
+                relationship_type=rel['type']
+            )
+            db.add(db_rel)
+            created_count += 1
+            
+    await db.commit()
+    return {"status": "ok", "created": created_count}
+
+
 # --- Characters ---
 
 @app.get("/api/characters", response_model=list[schemas.Character])
@@ -202,6 +268,8 @@ async def accept_action_draft(character_id: int, payload: schemas.AcceptDraftReq
             raise HTTPException(status_code=404, detail="Character not found")
         
         db_character.stats = payload.character_stats
+        if payload.character_formulas is not None:
+            db_character.formulas = payload.character_formulas
         
         # Insert Ledger
         db_ledger = models.Ledger(character_id=character_id, **payload.ledger.model_dump())
@@ -214,9 +282,8 @@ async def accept_action_draft(character_id: int, payload: schemas.AcceptDraftReq
 # --- AI Engine Endpoints ---
 from app.ai import extract_tactical_drafts, extract_ambient_lore
 import json
-from pydantic import BaseModel
 
-from typing import Optional
+import anyio
 
 class TacticalAIRequest(BaseModel):
     system_box_text: str
@@ -248,10 +315,11 @@ async def trigger_tactical_ai(request: TacticalAIRequest, db: AsyncSession = Dep
     if not db_char:
         raise HTTPException(status_code=404, detail="Character not found")
         
-    drafts = extract_tactical_drafts(
-        system_box_text=request.system_box_text,
-        context_text=request.surrounding_text,
-        current_stats=db_char.stats
+    drafts = await anyio.to_thread.run_sync(
+        extract_tactical_drafts,
+        request.system_box_text,
+        request.surrounding_text,
+        db_char.stats
     )
     return {"status": "ok", "drafts": drafts}
 
@@ -265,8 +333,9 @@ async def trigger_ambient_ai(request: AmbientAIRequest, db: AsyncSession = Depen
     lore_entities = result.scalars().all()
     wiki_index = [{"name": l.name, "category": l.category} for l in lore_entities]
     
-    drafts = extract_ambient_lore(
-        narrative_text=request.narrative_text,
-        wiki_index=wiki_index
+    drafts = await anyio.to_thread.run_sync(
+        extract_ambient_lore,
+        request.narrative_text,
+        wiki_index
     )
     return {"status": "ok", "drafts": drafts}

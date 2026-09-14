@@ -7,7 +7,8 @@ import { RightInspector } from './components/Inspector/RightInspector'
 import type { DraftItem } from './components/Inspector/RightInspector'
 import { GlobalNav } from './components/Navigation/GlobalNav'
 import type { ViewType } from './components/Navigation/GlobalNav'
-import { ProjectsView, BibleView, AnalyticsView, SettingsView } from './components/Views/PlaceholderViews'
+import { ProjectsView, AnalyticsView, SettingsView } from './components/Views/PlaceholderViews'
+import { BibleView } from './components/Views/BibleView'
 import { fetchChapters, updateChapter, triggerTacticalAI, triggerAmbientAI } from './api'
 import './App.css'
 
@@ -178,7 +179,9 @@ export default function App() {
         }))
         setDrafts(prev => {
           const existingTitles = new Set(prev.map(d => d.title))
-          const uniqueNew = stampedDrafts.filter((d: any) => !existingTitles.has(d.title))
+          const uniqueNew = stampedDrafts.filter((d: any) => 
+            d.type === 'relationships' || !existingTitles.has(d.title)
+          )
           return [...prev, ...uniqueNew]
         })
         setRightCollapsed(false) // Open right sidebar if there's results
@@ -228,6 +231,7 @@ export default function App() {
         <TipTapEditor
           key={activeChapterId ?? 'empty'}
           chapterId={activeChapterId ?? undefined}
+          projectId={projectId}
           initialContent={activeChapter?.content || ''}
           onWordCountChange={setWordCount}
           onContentChange={handleContentChangeForAI}

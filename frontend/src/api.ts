@@ -118,6 +118,23 @@ export const createLore = async (payload: LoreCreatePayload): Promise<LoreEntity
     return data
 }
 
+export const updateLore = async (loreId: number, payload: Partial<LoreCreatePayload>): Promise<LoreEntity> => {
+    const { data } = await api.put<LoreEntity>('/lore/' + loreId, payload)
+    return data
+}
+
+export const deleteLore = async (loreId: number): Promise<void> => {
+    await api.delete('/lore/' + loreId)
+}
+
+export const createLoreRelationshipsBulk = async (projectId: number, relationships: any[]) => {
+    const { data } = await api.post('/lore-relationships/bulk', {
+        project_id: projectId,
+        relationships
+    })
+    return data
+}
+
 export const fetchCharacters = async (projectId: number): Promise<Character[]> => {
     const { data } = await api.get<Character[]>('/characters?project_id=' + projectId)
     return data
@@ -138,13 +155,19 @@ export const triggerAmbientAI = async (payload: AmbientAIPayload) => {
     return data
 }
 
+export const updateCharacter = async (characterId: number, payload: any) => {
+    const { data } = await api.put(`/characters/${characterId}`, payload)
+    return data
+}
+
 export const acceptActionDraft = async (
     characterId: number, 
-    characterPayload: AcceptActionPayload, 
+    characterPayload: AcceptActionPayload & { formulas?: any }, 
     ledgerPayload: AcceptActionLedgerPayload
 ) => {
     const { data } = await api.post(`/characters/${characterId}/accept-draft`, {
         character_stats: characterPayload.stats,
+        character_formulas: characterPayload.formulas,
         ledger: ledgerPayload
     })
     return data

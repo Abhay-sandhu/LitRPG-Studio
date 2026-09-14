@@ -50,11 +50,35 @@ class ActionDraftModel(BaseModel):
 class TacticalResponse(BaseModel):
     drafts: List[ActionDraftModel]
 
+class LoreRelationshipDraft(BaseModel):
+    source_entity_name: str
+    target_entity_name: str
+    relationship_type: str
+
 class AmbientResponse(BaseModel):
     drafts: List[ActionDraftModel]
+    relationships: Optional[List[LoreRelationshipDraft]] = None
 
-def map_drafts_for_frontend(drafts: List[ActionDraftModel]) -> List[dict]:
+def map_drafts_for_frontend(drafts: List[ActionDraftModel], relationships: Optional[List[LoreRelationshipDraft]] = None) -> List[dict]:
     result = []
+    # If we have relationships, we can bundle them as a special draft or handle them separately.
+    # For now, let's just create a special draft for relationships if we want them in the UI.
+    # Alternatively, they can just be saved quietly in the backend. 
+    # But this function returns UI drafts. Let's return drafts and a separate dict for relationships, 
+    # but the current signature returns a list of dicts. 
+    # Let's attach relationships to the FIRST draft, or make a mock draft for them.
+    # Actually, returning them as a separate list is better, but since it breaks signature, let's just make a mock draft.
+    if relationships:
+        rel_draft = {
+            "id": 99999,
+            "type": "relationships",
+            "title": "New Lore Relationships",
+            "desc": f"Discovered {len(relationships)} new relationships in the text.",
+            "context": "GraphRAG Update",
+            "relationships": [{"source": r.source_entity_name, "target": r.target_entity_name, "type": r.relationship_type} for r in relationships]
+        }
+        result.append(rel_draft)
+
     for d in drafts:
         draft_dict = {
             "id": d.id,
@@ -118,7 +142,7 @@ def extract_tactical_drafts(system_box_text: str, context_text: str, current_sta
                 response_mime_type="application/json",
                 response_schema=TacticalResponse,
                 temperature=0.1,
-                http_options=types.HttpOptions(timeout=30)
+                http_options=types.HttpOptions(timeout=60000)
             ),
         )
         return map_drafts_for_frontend(response.parsed.drafts) if response.parsed else []
@@ -129,6 +153,8 @@ def extract_tactical_drafts(system_box_text: str, context_text: str, current_sta
 def extract_ambient_lore(narrative_text: str, wiki_index: list) -> List[dict]:
     prompt = f"""
     You are a World-Building Assistant. Read the following chapter excerpt and extract ANY new characters, locations, items, or concepts that should be added to the Lore Wiki. Do not duplicate existing entities.
+    
+    Additionally, extract any distinct RELATIONSHIPS between entities (both new and existing). For example, if 'Elara' travels to 'Oakhaven', create a relationship 'travels to' between them. If 'Arthur' wields 'Excalibur', create a 'wields' relationship.
 
     Existing Wiki Entities:
     {wiki_index}
@@ -149,10 +175,10 @@ def extract_ambient_lore(narrative_text: str, wiki_index: list) -> List[dict]:
                 response_mime_type="application/json",
                 response_schema=AmbientResponse,
                 temperature=0.2,
-                http_options=types.HttpOptions(timeout=30)
+                http_options=types.HttpOptions(timeout=60000)
             ),
         )
-        return map_drafts_for_frontend(response.parsed.drafts) if response.parsed else []
+        return map_drafts_for_frontend(response.parsed.drafts, response.parsed.relationships) if response.parsed else []
     except Exception as e:
         print(f"Ambient AI Error: {e}")
         return []

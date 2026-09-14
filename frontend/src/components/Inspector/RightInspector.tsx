@@ -12,7 +12,7 @@ import {
   Zap,
 } from 'lucide-react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { fetchCharacters, fetchCharacterLedger, acceptActionDraft, createLore } from '../../api'
+import { fetchCharacters, fetchCharacterLedger, acceptActionDraft, createLore, updateCharacter, createLoreRelationshipsBulk } from '../../api'
 
 export interface DraftItem {
   id: number
@@ -22,6 +22,7 @@ export interface DraftItem {
   context: string
   changes?: Record<string, any>
   lore_entity?: Record<string, any>
+  relationships?: Array<{source: string, target: string, type: string}>
 }
 
 interface RightInspectorProps {
@@ -44,6 +45,10 @@ export const RightInspector: React.FC<RightInspectorProps> = React.memo(({
   activeChapterId,
 }) => {
   const [activeTab, setActiveTab] = useState<'sheet' | 'ledger' | 'drafts'>('sheet')
+  const [isEditingFormulas, setIsEditingFormulas] = useState(false)
+  const [editedFormulaRows, setEditedFormulaRows] = useState<Array<{id: string, key: string, value: string}>>([])
+  const [newFormulaKey, setNewFormulaKey] = useState('')
+  const [newFormulaValue, setNewFormulaValue] = useState('')
 
   // Fetch Characters
   const { data: characters = [], isLoading: isCharsLoading } = useQuery({
@@ -99,6 +104,8 @@ export const RightInspector: React.FC<RightInspectorProps> = React.memo(({
       // 2. Process Character Stat/Item changes if present
       if (draft.changes && typeof draft.changes === 'object' && Object.keys(draft.changes).length > 0) {
         const updatedStats = { ...protagonist.stats }
+        let updatedFormulas = { ...(protagonist.formulas || {}) }
+        let formulasChanged = false
         
         Object.entries(draft.changes).forEach(([statKey, changeVal]: [string, any]) => {
           // A. Handle numeric / scalar stat changes
@@ -169,6 +176,18 @@ export const RightInspector: React.FC<RightInspectorProps> = React.memo(({
               updatedStats[statKey] = [changeVal.append]
             }
           }
+          
+          // C. Handle relative stat buffs / delta overrides on formulas
+          if (changeVal.delta !== undefined) {
+             const deltaStr = String(changeVal.delta)
+             if (protagonist.formulas && protagonist.formulas[statKey]) {
+                const numMatch = deltaStr.trim().match(/^([+-]\s*\d+(?:\.\d+)?)/)
+                if (numMatch) {
+                    updatedFormulas[statKey] = `(${updatedFormulas[statKey]}) ${numMatch[1]}`
+                    formulasChanged = true
+                }
+             }
+          }
         })
 
         const ledgerEntry = {
@@ -179,10 +198,23 @@ export const RightInspector: React.FC<RightInspectorProps> = React.memo(({
           source_type: "AI Draft"
         }
 
-        await acceptActionDraft(protagonist.id, { stats: updatedStats }, ledgerEntry)
+        const payload: any = { stats: updatedStats }
+        if (formulasChanged) {
+            payload.formulas = updatedFormulas
+        }
+
+        await acceptActionDraft(protagonist.id, payload, ledgerEntry)
         
         queryClient.invalidateQueries({ queryKey: ['characters'] })
         queryClient.invalidateQueries({ queryKey: ['ledger', protagonist.id] })
+        acceptedSomething = true
+      }
+
+      // 3. Process GraphRAG Relationships if present
+      if (draft.type === 'relationships' && draft.relationships) {
+        await createLoreRelationshipsBulk(projectId, draft.relationships)
+        queryClient.invalidateQueries({ queryKey: ['lore', projectId] })
+        queryClient.invalidateQueries({ queryKey: ['lore-relationships', projectId] })
         acceptedSomething = true
       }
 
@@ -358,16 +390,133 @@ export const RightInspector: React.FC<RightInspectorProps> = React.memo(({
                 </div>
             ))}
 
-            {/* Formulas Breakdown */}
-            {protagonist.formulas && Object.keys(protagonist.formulas).length > 0 && (
-                <div className="pt-1 space-y-1">
-                    {Object.entries(protagonist.formulas).map(([key, formula]: [string, any]) => (
-                        <div key={key} className="text-[10px] text-slate-500 font-mono bg-slate-50 dark:bg-slate-900/50 p-2 rounded border border-slate-200 dark:border-slate-800/50">
-                            {key} = {formula}
-                        </div>
-                    ))}
+            {/* Formulas Breakdown & Editor */}
+            <div className="pt-2">
+                <div className="flex items-center justify-between mb-2">
+                    <span className="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                        Derived Formulas
+                    </span>
+                    <button
+                        type="button"
+                        onClick={async () => {
+                            if (isEditingFormulas) {
+                                // Save
+                                const finalFormulas = editedFormulaRows.reduce((acc, row) => {
+                                  if (row.key) acc[row.key] = row.value
+                                  return acc
+                                }, {} as Record<string, string>)
+                                
+                                if (newFormulaKey.trim() && newFormulaValue.trim()) {
+                                  finalFormulas[newFormulaKey.trim()] = newFormulaValue.trim()
+                                }
+                                
+                                await updateCharacter(protagonist.id, { formulas: finalFormulas })
+                                queryClient.invalidateQueries({ queryKey: ['characters'] })
+                            } else {
+                                // Start editing
+                                const existingFormulas = protagonist.formulas || {}
+                                const rows = Object.entries(existingFormulas).map(([k, v]) => ({
+                                  id: Math.random().toString(36).substr(2, 9),
+                                  key: k,
+                                  value: v as string
+                                }))
+                                setEditedFormulaRows(rows)
+                                setNewFormulaKey("")
+                                setNewFormulaValue("")
+                            }
+                            setIsEditingFormulas(!isEditingFormulas)
+                        }}
+                        className="text-[10px] bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 px-2 py-1 rounded text-slate-600 dark:text-slate-300 font-medium transition-colors"
+                    >
+                        {isEditingFormulas ? 'Save' : 'Edit'}
+                    </button>
                 </div>
-            )}
+
+                {isEditingFormulas ? (
+                    <div className="space-y-2">
+                        {editedFormulaRows.map((row) => (
+                            <div key={row.id} className="flex gap-2 items-center">
+                                <input
+                                    value={row.key}
+                                    onChange={(e) => {
+                                        setEditedFormulaRows(prev => prev.map(r => r.id === row.id ? { ...r, key: e.target.value } : r))
+                                    }}
+                                    placeholder="Stat Name"
+                                    className="flex-1 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded px-2 py-1 text-xs"
+                                />
+                                <span className="text-slate-400">=</span>
+                                <input
+                                    value={row.value}
+                                    onChange={(e) => {
+                                        setEditedFormulaRows(prev => prev.map(r => r.id === row.id ? { ...r, value: e.target.value } : r))
+                                    }}
+                                    placeholder="e.g. Endurance * 10"
+                                    className="flex-[2] bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded px-2 py-1 text-xs font-mono"
+                                />
+                                <button
+                                    onClick={() => {
+                                        setEditedFormulaRows(prev => prev.filter(r => r.id !== row.id))
+                                    }}
+                                    className="text-red-500 hover:text-red-700 p-1"
+                                    title="Remove Formula"
+                                >
+                                    <X className="w-3.5 h-3.5" />
+                                </button>
+                            </div>
+                        ))}
+                        
+                        {/* Add New Formula Row */}
+                        <div className="flex gap-2 items-center pt-1 border-t border-slate-100 dark:border-slate-800/50">
+                            <input
+                                value={newFormulaKey}
+                                onChange={(e) => setNewFormulaKey(e.target.value)}
+                                placeholder="New Stat (e.g. Max HP)"
+                                className="flex-1 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded px-2 py-1 text-xs"
+                            />
+                            <span className="text-slate-400">=</span>
+                            <input
+                                value={newFormulaValue}
+                                onChange={(e) => setNewFormulaValue(e.target.value)}
+                                placeholder="Formula"
+                                className="flex-[2] bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded px-2 py-1 text-xs font-mono"
+                                onKeyDown={(e) => {
+                                    if (e.key === 'Enter' && newFormulaKey && newFormulaValue) {
+                                        setEditedFormulaRows(prev => [...prev, { id: Math.random().toString(36).substr(2, 9), key: newFormulaKey, value: newFormulaValue }])
+                                        setNewFormulaKey("")
+                                        setNewFormulaValue("")
+                                    }
+                                }}
+                            />
+                            <button
+                                onClick={() => {
+                                    if (newFormulaKey && newFormulaValue) {
+                                        setEditedFormulaRows(prev => [...prev, { id: Math.random().toString(36).substr(2, 9), key: newFormulaKey, value: newFormulaValue }])
+                                        setNewFormulaKey("")
+                                        setNewFormulaValue("")
+                                    }
+                                }}
+                                className="text-emerald-600 hover:text-emerald-700 p-1"
+                                title="Add Formula"
+                            >
+                                <Check className="w-3.5 h-3.5" />
+                            </button>
+                        </div>
+                    </div>
+                ) : (
+                    protagonist.formulas && Object.keys(protagonist.formulas).length > 0 ? (
+                        <div className="space-y-1">
+                            {Object.entries(protagonist.formulas).map(([key, formula]: [string, any]) => (
+                                <div key={key} className="text-[10px] text-slate-500 font-mono bg-slate-50 dark:bg-slate-900/50 p-2 rounded border border-slate-200 dark:border-slate-800/50 flex justify-between">
+                                    <span className="font-semibold">{key}</span>
+                                    <span>= {formula}</span>
+                                </div>
+                            ))}
+                        </div>
+                    ) : (
+                        <div className="text-[10px] text-slate-400 italic py-1">No formulas defined.</div>
+                    )
+                )}
+            </div>
           </>
         ) : activeTab === 'ledger' ? (
           <div className="space-y-3">
