@@ -51,7 +51,7 @@ export default function App() {
     if (activeChapter) {
       setWordCount(activeChapter.words ?? 0)
     }
-  }, [activeChapterId, activeChapter?.words])
+  }, [activeChapter])
 
   const [isDarkMode, setIsDarkMode] = useState(() => {
     const saved = localStorage.getItem('theme')

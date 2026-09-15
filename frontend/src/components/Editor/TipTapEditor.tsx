@@ -1,6 +1,7 @@
 import React, { useEffect, useRef } from 'react'
 import { useEditor, EditorContent } from '@tiptap/react'
 import StarterKit from '@tiptap/starter-kit'
+import Underline from '@tiptap/extension-underline'
 import Placeholder from '@tiptap/extension-placeholder'
 import CharacterCount from '@tiptap/extension-character-count'
 import TextAlign from '@tiptap/extension-text-align'
@@ -48,6 +49,7 @@ export const TipTapEditor: React.FC<TipTapEditorProps> = ({
       heading: { levels: [1, 2, 3] },
       blockquote: { HTMLAttributes: { class: 'system-blue-box' } },
     }),
+    Underline,
     Placeholder.configure({
       placeholder: 'Write your story here or insert a [System Box]...',
     }),

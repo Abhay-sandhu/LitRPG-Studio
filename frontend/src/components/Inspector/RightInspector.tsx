@@ -75,16 +75,15 @@ export const RightInspector: React.FC<RightInspectorProps> = React.memo(({
     if (processedDrafts.current.has(id)) return
 
     const draft = drafts.find((d) => d.id === id)
-    if (!draft || !protagonist) return
+    if (!draft) return
 
     if (draft.changes && typeof draft.changes === 'object' && Object.keys(draft.changes).length > 0 && !activeChapterId) {
         alert("Cannot accept draft: No active chapter found. Please ensure you are viewing a chapter.")
         return
     }
 
-    processedDrafts.current.add(id)
-
     try {
+      processedDrafts.current.add(id)
       let acceptedSomething = false
 
       // 1. Process World-Building Lore if present
@@ -103,6 +102,11 @@ export const RightInspector: React.FC<RightInspectorProps> = React.memo(({
 
       // 2. Process Character Stat/Item changes if present
       if (draft.changes && typeof draft.changes === 'object' && Object.keys(draft.changes).length > 0) {
+        if (!protagonist) {
+          alert("Cannot apply stat changes because no protagonist character exists.")
+          processedDrafts.current.delete(id)
+          return
+        }
         const updatedStats = { ...protagonist.stats }
         let updatedFormulas = { ...(protagonist.formulas || {}) }
         let formulasChanged = false
@@ -343,9 +347,10 @@ export const RightInspector: React.FC<RightInspectorProps> = React.memo(({
       <div className="flex-1 overflow-y-auto p-4 space-y-4">
         {isCharsLoading ? (
             <div className="text-center py-8 text-slate-400"><Activity className="w-6 h-6 mx-auto animate-pulse" /></div>
-        ) : !protagonist ? (
-            <div className="text-center py-8 text-slate-400 text-xs">No character data available.</div>
         ) : activeTab === 'sheet' ? (
+          !protagonist ? (
+            <div className="text-center py-8 text-slate-400 text-xs">No character data available.</div>
+          ) : (
           <>
             {/* Identity Card */}
             <div className="bg-white dark:bg-slate-950/70 border border-slate-200 dark:border-slate-800/90 rounded-xl p-3.5 shadow-sm transition-colors">
@@ -518,7 +523,11 @@ export const RightInspector: React.FC<RightInspectorProps> = React.memo(({
                 )}
             </div>
           </>
+          )
         ) : activeTab === 'ledger' ? (
+          !protagonist ? (
+            <div className="text-center py-8 text-slate-400 text-xs">No character data available.</div>
+          ) : (
           <div className="space-y-3">
              {isLedgerLoading ? (
                  <div className="text-center py-4"><Activity className="w-4 h-4 mx-auto animate-pulse text-slate-400" /></div>
@@ -554,6 +563,7 @@ export const RightInspector: React.FC<RightInspectorProps> = React.memo(({
                 </div>
              )}
           </div>
+          )
         ) : (
           <>
             {/* Pending AI Draft Cards */}
