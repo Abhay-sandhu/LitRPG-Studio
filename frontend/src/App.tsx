@@ -145,10 +145,7 @@ export default function App() {
             id: Date.now() + idx
           }))
           setDrafts(prev => {
-            const existingTitles = new Set(prev.map(d => d.title))
-            // We NO LONGER filter by processedDraftTitlesRef here, allowing identical stat names (e.g., "+2 STR") across different blockquotes.
-            const uniqueNew = stampedDrafts.filter((d: any) => !existingTitles.has(d.title))
-            return [...prev, ...uniqueNew]
+            return [...prev, ...stampedDrafts]
           })
         }
       } catch (err) {
@@ -178,11 +175,7 @@ export default function App() {
           id: Date.now() + idx
         }))
         setDrafts(prev => {
-          const existingTitles = new Set(prev.map(d => d.title))
-          const uniqueNew = stampedDrafts.filter((d: any) => 
-            d.type === 'relationships' || !existingTitles.has(d.title)
-          )
-          return [...prev, ...uniqueNew]
+          return [...prev, ...stampedDrafts]
         })
         setRightCollapsed(false) // Open right sidebar if there's results
       }

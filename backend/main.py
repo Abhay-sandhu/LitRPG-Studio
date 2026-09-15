@@ -2,6 +2,7 @@ from fastapi import FastAPI, Depends, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
+from sqlalchemy.exc import IntegrityError
 from pydantic import BaseModel
 from typing import Optional
 from contextlib import asynccontextmanager
@@ -23,7 +24,15 @@ app = FastAPI(title="ChronicleRPG Studio API", lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173", "http://localhost:5174", "http://127.0.0.1:5173", "http://127.0.0.1:5174"],
+    allow_origins=[
+        "http://localhost:5173", "http://127.0.0.1:5173",
+        "http://localhost:5174", "http://127.0.0.1:5174",
+        "http://localhost:5175", "http://127.0.0.1:5175",
+        "http://localhost:5176", "http://127.0.0.1:5176",
+        "http://localhost:5177", "http://127.0.0.1:5177",
+        "http://localhost:5178", "http://127.0.0.1:5178",
+        "http://localhost:5179", "http://127.0.0.1:5179",
+    ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -61,8 +70,12 @@ async def get_chapter(chapter_id: int, db: AsyncSession = Depends(get_db)):
 async def create_chapter(chapter: schemas.ChapterCreate, db: AsyncSession = Depends(get_db)):
     db_chapter = models.Chapter(**chapter.model_dump())
     db.add(db_chapter)
-    await db.commit()
-    await db.refresh(db_chapter)
+    try:
+        await db.commit()
+        await db.refresh(db_chapter)
+    except IntegrityError:
+        await db.rollback()
+        raise HTTPException(status_code=404, detail="Project not found")
     return db_chapter
 
 @app.put("/api/chapters/{chapter_id}", response_model=schemas.Chapter)
@@ -99,8 +112,12 @@ async def get_lore(project_id: int, db: AsyncSession = Depends(get_db)):
 async def create_lore(lore: schemas.LoreEntityCreate, db: AsyncSession = Depends(get_db)):
     db_lore = models.LoreEntity(**lore.model_dump())
     db.add(db_lore)
-    await db.commit()
-    await db.refresh(db_lore)
+    try:
+        await db.commit()
+        await db.refresh(db_lore)
+    except IntegrityError:
+        await db.rollback()
+        raise HTTPException(status_code=404, detail="Project not found")
     return db_lore
 
 @app.put("/api/lore/{lore_id}", response_model=schemas.LoreEntity)
@@ -141,55 +158,59 @@ async def get_lore_relationships(project_id: int, db: AsyncSession = Depends(get
 
 @app.post("/api/lore-relationships/bulk")
 async def bulk_create_lore_relationships(payload: BulkLoreRelationshipRequest, db: AsyncSession = Depends(get_db)):
-    # 1. Fetch all lore entities for the project to map names to IDs
-    result = await db.execute(select(models.LoreEntity).where(models.LoreEntity.project_id == payload.project_id))
-    entities = result.scalars().all()
-    name_to_id = {e.name.lower(): e.id for e in entities}
-    # Fetch existing relationships to prevent duplicates
-    existing_rels = await db.execute(
-        select(models.LoreRelationship).where(models.LoreRelationship.project_id == payload.project_id)
-    )
-    existing_set = {(r.source_id, r.target_id, r.relationship_type.strip().lower()) for r in existing_rels.scalars().all()}
-    
-    created_count = 0
-    for rel in payload.relationships:
-        source_name = rel['source']
-        target_name = rel['target']
+    try:
+        # 1. Fetch all lore entities for the project to map names to IDs
+        result = await db.execute(select(models.LoreEntity).where(models.LoreEntity.project_id == payload.project_id))
+        entities = result.scalars().all()
+        name_to_id = {e.name.lower(): e.id for e in entities}
+        # Fetch existing relationships to prevent duplicates
+        existing_rels = await db.execute(
+            select(models.LoreRelationship).where(models.LoreRelationship.project_id == payload.project_id)
+        )
+        existing_set = {(r.source_id, r.target_id, r.relationship_type.strip().lower()) for r in existing_rels.scalars().all()}
         
-        source_id = name_to_id.get(source_name.lower())
-        if not source_id:
-            new_source = models.LoreEntity(project_id=payload.project_id, name=source_name, category='Concept')
-            db.add(new_source)
-            await db.flush()
-            source_id = new_source.id
-            name_to_id[source_name.lower()] = source_id
+        created_count = 0
+        for rel in payload.relationships:
+            source_name = rel['source']
+            target_name = rel['target']
             
-        target_id = name_to_id.get(target_name.lower())
-        if not target_id:
-            new_target = models.LoreEntity(project_id=payload.project_id, name=target_name, category='Concept')
-            db.add(new_target)
-            await db.flush()
-            target_id = new_target.id
-            name_to_id[target_name.lower()] = target_id
-            
-        if source_id and target_id:
-            rel_tuple = (source_id, target_id, rel['type'].strip().lower())
-            if rel_tuple in existing_set:
-                continue
-            existing_set.add(rel_tuple)
-            
-            # Create relationship
-            db_rel = models.LoreRelationship(
-                project_id=payload.project_id,
-                source_id=source_id,
-                target_id=target_id,
-                relationship_type=rel['type']
-            )
-            db.add(db_rel)
-            created_count += 1
-            
-    await db.commit()
-    return {"status": "ok", "created": created_count}
+            source_id = name_to_id.get(source_name.lower())
+            if not source_id:
+                new_source = models.LoreEntity(project_id=payload.project_id, name=source_name, category='Concept')
+                db.add(new_source)
+                await db.flush()
+                source_id = new_source.id
+                name_to_id[source_name.lower()] = source_id
+                
+            target_id = name_to_id.get(target_name.lower())
+            if not target_id:
+                new_target = models.LoreEntity(project_id=payload.project_id, name=target_name, category='Concept')
+                db.add(new_target)
+                await db.flush()
+                target_id = new_target.id
+                name_to_id[target_name.lower()] = target_id
+                
+            if source_id and target_id:
+                rel_tuple = (source_id, target_id, rel['type'].strip().lower())
+                if rel_tuple in existing_set:
+                    continue
+                existing_set.add(rel_tuple)
+                
+                # Create relationship
+                db_rel = models.LoreRelationship(
+                    project_id=payload.project_id,
+                    source_id=source_id,
+                    target_id=target_id,
+                    relationship_type=rel['type']
+                )
+                db.add(db_rel)
+                created_count += 1
+                
+        await db.commit()
+        return {"status": "ok", "created": created_count}
+    except IntegrityError:
+        await db.rollback()
+        raise HTTPException(status_code=404, detail="Project not found")
 
 
 # --- Characters ---
@@ -211,8 +232,12 @@ async def get_character(character_id: int, db: AsyncSession = Depends(get_db)):
 async def create_character(character: schemas.CharacterCreate, db: AsyncSession = Depends(get_db)):
     db_character = models.Character(**character.model_dump())
     db.add(db_character)
-    await db.commit()
-    await db.refresh(db_character)
+    try:
+        await db.commit()
+        await db.refresh(db_character)
+    except IntegrityError:
+        await db.rollback()
+        raise HTTPException(status_code=404, detail="Project not found")
     return db_character
 
 @app.put("/api/characters/{character_id}", response_model=schemas.Character)

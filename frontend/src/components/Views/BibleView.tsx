@@ -43,7 +43,7 @@ export const BibleView: React.FC = () => {
     })
 
     // Extract unique categories
-    const categories = Array.from(new Set(lore.map(l => l.category))).sort()
+    const categories = Array.from(new Set(lore.map(l => l.category).filter(Boolean))).sort()
 
     const filteredLore = lore.filter(item => {
         const matchesSearch = item.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
@@ -74,7 +74,7 @@ export const BibleView: React.FC = () => {
             updateMutation.mutate({
                 id: editingEntity.id,
                 data: {
-                    name: editingEntity.name,
+                    name: editingEntity.name?.trim() || 'Untitled Entity',
                     category: editingEntity.category,
                     description: editingEntity.description,
                     attributes: parsedAttrs,
@@ -179,7 +179,7 @@ export const BibleView: React.FC = () => {
                                 <h3 className="text-lg font-bold text-slate-900 dark:text-slate-100 mb-2 truncate" title={item.name}>{item.name}</h3>
                                 <p className="text-sm text-slate-600 dark:text-slate-400 line-clamp-4 flex-1">{item.description}</p>
                                 
-                                {Object.keys(item.attributes || {}).length > 0 && (
+                                {item.attributes && typeof item.attributes === 'object' && !Array.isArray(item.attributes) && Object.keys(item.attributes).length > 0 && (
                                     <div className="mt-3 pt-3 border-t border-slate-100 dark:border-slate-800 flex flex-wrap gap-1">
                                         {Object.entries(item.attributes).slice(0,3).map(([k,v]) => (
                                             <span key={k} className="text-[10px] bg-slate-50 dark:bg-slate-950 px-1.5 py-0.5 rounded text-slate-500 border border-slate-200 dark:border-slate-800 truncate max-w-full">

@@ -82,6 +82,9 @@ export const TipTapEditor: React.FC<TipTapEditorProps> = ({
   const editor = useEditor({
     extensions,
     content: initialContent,
+    onCreate: ({ editor }) => {
+      onWordCountChange?.(editor.storage.characterCount.words())
+    },
     onUpdate: ({ editor }) => {
       const words = editor.storage.characterCount.words()
       const content = editor.getHTML()
@@ -104,7 +107,7 @@ export const TipTapEditor: React.FC<TipTapEditorProps> = ({
 
   // Ensure lore is loaded into editor storage
   useEffect(() => {
-    if (editor) {
+    if (editor && !editor.isDestroyed && editor.view) {
       const storage = editor.storage as any
       storage.loreHighlighter = storage.loreHighlighter || {}
       storage.loreHighlighter.entities = lore
