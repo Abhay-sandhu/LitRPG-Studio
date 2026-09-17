@@ -8,7 +8,7 @@ export default {
     // For now, let's assume editor.storage.lore.entities has the list.
     const lore = editor.storage.lore?.entities || []
     return lore
-      .filter((item: any) => item.name.toLowerCase().includes(query.toLowerCase()))
+      .filter((item: any) => item.name && item.name.toLowerCase().includes((query || '').toLowerCase()))
       .slice(0, 5)
   },
 
@@ -39,7 +39,7 @@ export default {
       },
 
       onUpdate(props: any) {
-        component.updateProps(props)
+        component?.updateProps(props)
 
         if (!props.clientRect) {
           return
@@ -61,7 +61,7 @@ export default {
 
       onExit() {
         popup?.[0]?.destroy()
-        component.destroy()
+        component?.destroy()
       },
     }
   },

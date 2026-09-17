@@ -171,9 +171,13 @@ async def bulk_create_lore_relationships(payload: BulkLoreRelationshipRequest, d
         
         created_count = 0
         for rel in payload.relationships:
-            source_name = rel['source']
-            target_name = rel['target']
+            source_name = rel.get('source')
+            target_name = rel.get('target')
+            rel_type = rel.get('type')
             
+            if not isinstance(source_name, str) or not isinstance(target_name, str) or not isinstance(rel_type, str):
+                continue
+                
             source_id = name_to_id.get(source_name.lower())
             if not source_id:
                 new_source = models.LoreEntity(project_id=payload.project_id, name=source_name, category='Concept')
@@ -191,7 +195,7 @@ async def bulk_create_lore_relationships(payload: BulkLoreRelationshipRequest, d
                 name_to_id[target_name.lower()] = target_id
                 
             if source_id and target_id:
-                rel_tuple = (source_id, target_id, rel['type'].strip().lower())
+                rel_tuple = (source_id, target_id, rel_type.strip().lower())
                 if rel_tuple in existing_set:
                     continue
                 existing_set.add(rel_tuple)
@@ -201,7 +205,7 @@ async def bulk_create_lore_relationships(payload: BulkLoreRelationshipRequest, d
                     project_id=payload.project_id,
                     source_id=source_id,
                     target_id=target_id,
-                    relationship_type=rel['type']
+                    relationship_type=rel_type
                 )
                 db.add(db_rel)
                 created_count += 1
@@ -278,31 +282,38 @@ async def get_character_ledger(character_id: int, db: AsyncSession = Depends(get
 async def create_ledger_entry(character_id: int, ledger: schemas.LedgerCreate, db: AsyncSession = Depends(get_db)):
     db_ledger = models.Ledger(character_id=character_id, **ledger.model_dump())
     db.add(db_ledger)
-    await db.commit()
-    await db.refresh(db_ledger)
+    try:
+        await db.commit()
+        await db.refresh(db_ledger)
+    except IntegrityError:
+        await db.rollback()
+        raise HTTPException(status_code=404, detail="Character or Chapter not found")
     return db_ledger
 
 @app.post("/api/characters/{character_id}/accept-draft")
 async def accept_action_draft(character_id: int, payload: schemas.AcceptDraftRequest, db: AsyncSession = Depends(get_db)):
-    # Run in a single transaction
-    async with db.begin():
-        # Update Character
-        result = await db.execute(select(models.Character).where(models.Character.id == character_id))
-        db_character = result.scalars().first()
-        if not db_character:
-            raise HTTPException(status_code=404, detail="Character not found")
-        
-        db_character.stats = payload.character_stats
-        if payload.character_formulas is not None:
-            db_character.formulas = payload.character_formulas
-        
-        # Insert Ledger
-        db_ledger = models.Ledger(character_id=character_id, **payload.ledger.model_dump())
-        db.add(db_ledger)
-        
-    # Transaction auto-commits upon exit of `async with db.begin()` block
-    await db.refresh(db_ledger)
-    return {"status": "ok", "ledger_id": db_ledger.id}
+    try:
+        # Run in a single transaction
+        async with db.begin():
+            # Update Character
+            result = await db.execute(select(models.Character).where(models.Character.id == character_id))
+            db_character = result.scalars().first()
+            if not db_character:
+                raise HTTPException(status_code=404, detail="Character not found")
+            
+            db_character.stats = payload.character_stats
+            if payload.character_formulas is not None:
+                db_character.formulas = payload.character_formulas
+            
+            # Insert Ledger
+            db_ledger = models.Ledger(character_id=character_id, **payload.ledger.model_dump())
+            db.add(db_ledger)
+            
+        # Transaction auto-commits upon exit of `async with db.begin()` block
+        await db.refresh(db_ledger)
+        return {"status": "ok", "ledger_id": db_ledger.id}
+    except IntegrityError:
+        raise HTTPException(status_code=404, detail="Character or Chapter not found")
 
 # --- AI Engine Endpoints ---
 from app.ai import extract_tactical_drafts, extract_ambient_lore

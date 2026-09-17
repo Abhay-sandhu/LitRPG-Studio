@@ -36,16 +36,21 @@ export const LoreHighlighter = Extension.create({
             
             const escapeRegExp = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
 
+            const compiled = entities
+              .filter((e: any) => e.name?.trim())
+              .map((e: any) => {
+                const trimmed = e.name.trim()
+                const escaped = escapeRegExp(trimmed)
+                const prefix = /^\w/.test(trimmed) ? '\\b' : ''
+                const suffix = /\w$/.test(trimmed) ? '\\b' : ''
+                return { entity: e, regex: new RegExp(`${prefix}${escaped}${suffix}`, 'gi') }
+              })
+
             tr.doc.descendants((node, pos) => {
               if (node.isText && node.text) {
                 const text = node.text
-                entities.forEach((entity: any) => {
-                  if (!entity.name?.trim()) return
-                  
-                  const escaped = escapeRegExp(entity.name.trim())
-                  const prefix = /^\w/.test(entity.name.trim()) ? '\\b' : ''
-                  const suffix = /\w$/.test(entity.name.trim()) ? '\\b' : ''
-                  const regex = new RegExp(`${prefix}${escaped}${suffix}`, 'gi')
+                compiled.forEach(({ entity, regex }: { entity: any, regex: RegExp }) => {
+                  regex.lastIndex = 0
                   let match
                   while ((match = regex.exec(text)) !== null) {
                     if (match[0].length === 0) break

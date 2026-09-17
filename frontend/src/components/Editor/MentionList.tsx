@@ -4,9 +4,9 @@ const MentionList = forwardRef((props: any, ref) => {
   const [selectedIndex, setSelectedIndex] = useState(0)
 
   const selectItem = (index: number) => {
-    const item = props.items[index]
+    const item = props.items?.[index]
     if (item) {
-      props.command({ id: item.id, label: item.name })
+      props.command?.({ id: item.id, label: item.name })
     }
   }
 

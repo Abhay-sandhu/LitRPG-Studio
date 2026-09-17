@@ -84,7 +84,9 @@ export default function App() {
     titleTimeoutRef.current = setTimeout(() => {
       // Background save without invalidating to save an unnecessary network round-trip,
       // as the optimistic UI update already contains the true state.
-      updateChapter(activeChapterId, { title: newTitle })
+      updateChapter(activeChapterId, { title: newTitle }).catch(() => {
+        setSaveStatus('error')
+      })
     }, 500)
   }, [activeChapterId, queryClient, projectId])
 
@@ -213,6 +215,7 @@ export default function App() {
       <div className={`flex-1 flex overflow-hidden ${currentView === 'editor' ? '' : 'hidden'}`}>
         {/* Left Sidebar: Chapters & Local Story Bible */}
         <LeftSidebar
+          projectId={projectId}
           collapsed={leftCollapsed}
           onToggleCollapse={toggleLeftCollapse}
           chapters={chapters}

@@ -22,6 +22,7 @@ export interface ChapterItem {
 }
 
 interface LeftSidebarProps {
+  projectId: number
   collapsed: boolean
   onToggleCollapse: () => void
   chapters: ChapterItem[]
@@ -37,6 +38,7 @@ const ICON_MAP: Record<string, React.FC<any>> = {
 }
 
 export const LeftSidebar: React.FC<LeftSidebarProps> = React.memo(({
+  projectId,
   collapsed,
   onToggleCollapse,
   chapters,
@@ -48,11 +50,9 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = React.memo(({
   const [searchQuery, setSearchQuery] = useState('')
 
   const { data: bibleEntities = [] } = useQuery({
-    queryKey: ['lore', 1],
-    queryFn: () => fetchLore(1)
+    queryKey: ['lore', projectId],
+    queryFn: () => fetchLore(projectId)
   })
-
-  const projectId = 1 // Hardcoded for now
   
   const createChapterMutation = useMutation({
     mutationFn: () => createChapter({ project_id: projectId, title: 'Untitled Chapter', words: 0, order: chapters.length + 1 }),
