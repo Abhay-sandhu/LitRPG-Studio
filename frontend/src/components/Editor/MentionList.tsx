@@ -38,7 +38,8 @@ const MentionList = forwardRef((props: any, ref) => {
         return true
       }
 
-      if (event.key === 'Enter') {
+      if (event.key === 'Enter' || event.key === 'Tab') {
+        if (!props.items?.length) return false
         enterHandler()
         return true
       }

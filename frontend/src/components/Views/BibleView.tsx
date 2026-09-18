@@ -4,8 +4,11 @@ import { fetchLore, createLore, updateLore, deleteLore } from '../../api'
 import type { LoreEntity } from '../../api'
 import { Search, Plus, BookOpen, Edit2, Trash2, X, Check, Filter } from 'lucide-react'
 
-export const BibleView: React.FC = () => {
-    const projectId = 1 // Default to 1 for now, or get from context if available
+interface BibleViewProps {
+    projectId?: number
+}
+
+export const BibleView: React.FC<BibleViewProps> = ({ projectId = 1 }) => {
     const queryClient = useQueryClient()
     const [searchTerm, setSearchTerm] = useState('')
     const [selectedCategory, setSelectedCategory] = useState<string | null>(null)
@@ -24,6 +27,9 @@ export const BibleView: React.FC = () => {
             queryClient.invalidateQueries({ queryKey: ['lore'] })
             setIsCreating(false)
             setEditingEntity(null)
+        },
+        onError: (err: any) => {
+            alert(`Failed to create lore entry: ${err?.response?.data?.detail || err.message || 'Unknown error'}`)
         }
     })
 
@@ -32,6 +38,9 @@ export const BibleView: React.FC = () => {
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ['lore'] })
             setEditingEntity(null)
+        },
+        onError: (err: any) => {
+            alert(`Failed to update lore entry: ${err?.response?.data?.detail || err.message || 'Unknown error'}`)
         }
     })
 
@@ -39,6 +48,9 @@ export const BibleView: React.FC = () => {
         mutationFn: deleteLore,
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ['lore'] })
+        },
+        onError: (err: any) => {
+            alert(`Failed to delete lore entry: ${err?.response?.data?.detail || err.message || 'Unknown error'}`)
         }
     })
 
@@ -58,6 +70,11 @@ export const BibleView: React.FC = () => {
             parsedAttrs = JSON.parse(rawAttributes)
         } catch (e) {
             alert("Invalid JSON in attributes. Please fix before saving.")
+            return
+        }
+
+        if (typeof parsedAttrs !== 'object' || parsedAttrs === null || Array.isArray(parsedAttrs)) {
+            alert("Attributes must be a valid JSON object (e.g. {\"rank\": \"Rare\"}).")
             return
         }
 

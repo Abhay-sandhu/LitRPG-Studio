@@ -1,4 +1,4 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from typing import List, Optional, Any, Dict
 from datetime import datetime
 
@@ -27,7 +27,7 @@ class LoreEntityBase(BaseModel):
     name: str
     category: str
     description: Optional[str] = ''
-    attributes: Optional[Dict[str, Any]] = {}
+    attributes: Optional[Dict[str, Any]] = Field(default_factory=dict)
     is_promoted: Optional[bool] = False
 
 class LoreEntityCreate(LoreEntityBase):
@@ -62,7 +62,7 @@ class LoreRelationship(LoreRelationshipBase):
 
 class LedgerBase(BaseModel):
     event_name: str
-    changes: Dict[str, Any] = {}
+    changes: Dict[str, Any] = Field(default_factory=dict)
     source_type: Optional[str] = "System Box"
 
 class LedgerCreate(LedgerBase):
@@ -84,8 +84,8 @@ class AcceptDraftRequest(BaseModel):
 class CharacterBase(BaseModel):
     name: str
     is_protagonist: Optional[bool] = False
-    stats: Optional[Dict[str, Any]] = {}
-    formulas: Optional[Dict[str, Any]] = {}
+    stats: Optional[Dict[str, Any]] = Field(default_factory=dict)
+    formulas: Optional[Dict[str, Any]] = Field(default_factory=dict)
     lore_entity_id: Optional[int] = None
 
 class CharacterCreate(CharacterBase):
@@ -101,7 +101,7 @@ class CharacterUpdate(BaseModel):
 class Character(CharacterBase):
     id: int
     project_id: int
-    ledgers: List[Ledger] = []
+    ledgers: List[Ledger] = Field(default_factory=list)
     class Config:
         from_attributes = True
 
@@ -118,8 +118,9 @@ class ProjectListItem(ProjectBase):
 
 class Project(ProjectBase):
     id: int
-    chapters: List[Chapter] = []
-    lore_entities: List[LoreEntity] = []
-    characters: List[Character] = []
+    chapters: List[Chapter] = Field(default_factory=list)
+    lore_entities: List[LoreEntity] = Field(default_factory=list)
+    characters: List[Character] = Field(default_factory=list)
+    lore_relationships: List[LoreRelationship] = Field(default_factory=list)
     class Config:
         from_attributes = True

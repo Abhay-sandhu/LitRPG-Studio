@@ -1,4 +1,5 @@
-import React, { useEffect, useRef } from 'react'
+import React, { useEffect, useRef, useMemo } from 'react'
+import { FileText } from 'lucide-react'
 import { useEditor, EditorContent } from '@tiptap/react'
 import StarterKit from '@tiptap/starter-kit'
 import Underline from '@tiptap/extension-underline'
@@ -43,8 +44,8 @@ export const TipTapEditor: React.FC<TipTapEditorProps> = ({
     enabled: !!projectId
   })
 
-  // We define extensions dynamically so we can inject lore directly if we want
-  const extensions = [
+  // Memoize extensions to prevent unnecessary re-initialization
+  const extensions = useMemo(() => [
     StarterKit.configure({
       heading: { levels: [1, 2, 3] },
       blockquote: { HTMLAttributes: { class: 'system-blue-box' } },
@@ -63,7 +64,7 @@ export const TipTapEditor: React.FC<TipTapEditorProps> = ({
       suggestion,
     }),
     LoreHighlighter,
-  ]
+  ], [])
 
   const mutation = useMutation({
     mutationFn: (vars: { id: number, payload: any }) => updateChapter(vars.id, vars.payload),
@@ -143,13 +144,26 @@ export const TipTapEditor: React.FC<TipTapEditorProps> = ({
           words: savedData.words
         }).then(() => {
           queryClient.invalidateQueries({ queryKey: ['chapters'] })
-        }).catch(err => {
+        }).catch((err: any) => {
           console.error("Cleanup save failed:", err)
         })
       }
     }
   }, [queryClient])
 
+  if (!chapterId) {
+    return (
+      <div className="flex-1 flex flex-col items-center justify-center p-8 text-center bg-white dark:bg-slate-950 text-slate-400 dark:text-slate-500 select-none">
+        <div className="w-14 h-14 rounded-2xl bg-slate-100 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 flex items-center justify-center mb-4 text-slate-400 dark:text-slate-500 shadow-sm">
+          <FileText className="w-7 h-7" />
+        </div>
+        <h3 className="text-base font-semibold text-slate-800 dark:text-slate-200">No Chapter Selected</h3>
+        <p className="text-xs text-slate-500 dark:text-slate-400 mt-1.5 max-w-sm">
+          Select an existing chapter from the left sidebar or click <strong className="text-sky-600 dark:text-sky-400">+</strong> to create a new chapter.
+        </p>
+      </div>
+    )
+  }
 
   return (
     <div className="flex-1 flex flex-col h-full bg-white dark:bg-slate-950 overflow-hidden transition-colors">

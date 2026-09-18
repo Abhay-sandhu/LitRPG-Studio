@@ -108,6 +108,24 @@ export const updateChapter = async (chapterId: number, payload: ChapterUpdatePay
     return data
 }
 
+export const deleteChapter = async (chapterId: number): Promise<void> => {
+    await api.delete('/chapters/' + chapterId)
+}
+
+export const fetchProjects = async (): Promise<Array<{ id: number; title: string }>> => {
+    const { data } = await api.get('/projects')
+    return data
+}
+
+export const createProject = async (title: string): Promise<any> => {
+    const { data } = await api.post('/projects', { title })
+    return data
+}
+
+export const deleteProject = async (projectId: number): Promise<void> => {
+    await api.delete('/projects/' + projectId)
+}
+
 export const fetchLore = async (projectId: number): Promise<LoreEntity[]> => {
     const { data } = await api.get<LoreEntity[]>('/lore?project_id=' + projectId)
     return data
@@ -133,6 +151,15 @@ export const createLoreRelationshipsBulk = async (projectId: number, relationshi
         relationships
     })
     return data
+}
+
+export const createLoreRelationship = async (payload: { project_id: number; source_id: number; target_id: number; relationship_type: string }) => {
+    const { data } = await api.post('/lore-relationships', payload)
+    return data
+}
+
+export const deleteLoreRelationship = async (relId: number): Promise<void> => {
+    await api.delete('/lore-relationships/' + relId)
 }
 
 export const fetchCharacters = async (projectId: number): Promise<Character[]> => {

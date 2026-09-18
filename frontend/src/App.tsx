@@ -46,12 +46,21 @@ export default function App() {
   const activeChapter = chapters.find((c: any) => c.id === activeChapterId)
   const activeChapterTitle = activeChapter?.title || 'Untitled Chapter'
 
-  // Sync word count on chapter mount/change
+  // Helper to decode HTML entities into clean text for AI inputs
+  const unescapeHtml = (html: string): string => {
+    const doc = new DOMParser().parseFromString(html, 'text/html')
+    return doc.body.textContent || ""
+  }
+
+  // Sync word count and live content buffer on chapter mount/change (avoiding stale scans)
   useEffect(() => {
     if (activeChapter) {
       setWordCount(activeChapter.words ?? 0)
+      liveContentRef.current = activeChapter.content || ""
+    } else {
+      liveContentRef.current = ""
     }
-  }, [activeChapter])
+  }, [activeChapterId, activeChapter?.content])
 
   const [isDarkMode, setIsDarkMode] = useState(() => {
     const saved = localStorage.getItem('theme')
@@ -79,14 +88,19 @@ export default function App() {
     queryClient.setQueryData(['chapters', projectId], (old: any) => 
       old?.map((c: any) => c.id === activeChapterId ? { ...c, title: newTitle } : c)
     )
+    setSaveStatus('saving')
     
     if (titleTimeoutRef.current) clearTimeout(titleTimeoutRef.current)
     titleTimeoutRef.current = setTimeout(() => {
       // Background save without invalidating to save an unnecessary network round-trip,
       // as the optimistic UI update already contains the true state.
-      updateChapter(activeChapterId, { title: newTitle }).catch(() => {
-        setSaveStatus('error')
-      })
+      updateChapter(activeChapterId, { title: newTitle })
+        .then(() => {
+          setSaveStatus('synced')
+        })
+        .catch(() => {
+          setSaveStatus('error')
+        })
     }, 500)
   }, [activeChapterId, queryClient, projectId])
 
@@ -112,9 +126,9 @@ export default function App() {
     
     // Check if there are any new blockquotes we haven't processed yet
     const newBlockquotes = blockquoteMatches
-      .map((m, idx) => {
-        const text = m[1].replace(/<[^>]+>/g, '').trim()
-        const fingerprint = `${activeChapterId}:${idx}:${text}`
+      .map((m) => {
+        const text = unescapeHtml(m[1]).trim()
+        const fingerprint = `${activeChapterId}:${text}`
         return { text, fingerprint }
       })
       .filter(item => item.text.length > 0 && !processedBlockquotesRef.current.has(item.fingerprint))
@@ -131,8 +145,9 @@ export default function App() {
         // Mark these blockquotes as processed immediately so we don't double-fire
         newBlockquotes.forEach(bq => processedBlockquotesRef.current.add(bq.fingerprint))
         
-        // Strip HTML tags down to plain text for the context
-        const cleanedContext = content.replace(/<(?!\/?blockquote\b)[^>]+>/gi, '\n')
+        // Strip HTML tags and decode entities down to plain text for the context
+        const rawStripped = content.replace(/<(?!\/?blockquote\b)[^>]+>/gi, '\n')
+        const cleanedContext = unescapeHtml(rawStripped)
         // Send only the new blockquotes as the system box text
         const systemBoxText = newBlockquotes.map(bq => bq.text).join('\n---\n')
         
@@ -164,8 +179,9 @@ export default function App() {
       setIsAnalyzing(true)
       
       const contentToScan = liveContentRef.current || activeChapter.content
-      // Strip HTML tags down to plain text before sending to AI, keeping system boxes
-      const cleanedText = contentToScan.replace(/<(?!\/?blockquote\b)[^>]+>/gi, '\n')
+      // Strip HTML tags and decode HTML entities down to plain text before sending to AI
+      const rawStripped = contentToScan.replace(/<(?!\/?blockquote\b)[^>]+>/gi, '\n')
+      const cleanedText = unescapeHtml(rawStripped)
       
       const response = await triggerAmbientAI({
         narrative_text: cleanedText,
@@ -238,6 +254,7 @@ export default function App() {
         <RightInspector
           collapsed={rightCollapsed}
           onToggleCollapse={toggleRightCollapse}
+          projectId={projectId}
           drafts={drafts}
           setDrafts={setDrafts}
           onScanChapter={handleScanChapter}
@@ -246,7 +263,7 @@ export default function App() {
       </div>
 
       {currentView === 'projects' && <ProjectsView />}
-      {currentView === 'bible' && <BibleView />}
+      {currentView === 'bible' && <BibleView projectId={projectId} />}
       {currentView === 'analytics' && <AnalyticsView />}
       {currentView === 'settings' && <SettingsView />}
     </div>

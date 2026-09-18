@@ -18,6 +18,15 @@ export default {
 
     return {
       onStart: (props: any) => {
+        if (popup?.[0]) {
+          popup[0].destroy()
+          popup = null
+        }
+        if (component) {
+          component.destroy()
+          component = null
+        }
+
         component = new ReactRenderer(MentionList, {
           props,
           editor: props.editor,
@@ -61,7 +70,9 @@ export default {
 
       onExit() {
         popup?.[0]?.destroy()
+        popup = null
         component?.destroy()
+        component = null
       },
     }
   },

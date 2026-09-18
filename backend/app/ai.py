@@ -18,10 +18,12 @@ def get_client():
         _client = genai.Client(api_key=api_key)
     return _client
 
+import time
+
 class StatChange(BaseModel):
     stat: str
-    new_value: float
-    delta: str
+    new_value: Optional[float] = None
+    delta: Optional[str] = None
 
 class ListAddition(BaseModel):
     list_name: str # e.g., 'Skills', 'Inventory', 'Titles'
@@ -33,16 +35,16 @@ class LoreAttribute(BaseModel):
 
 class LoreEntityDraft(BaseModel):
     name: str
-    category: str
-    description: str
+    category: str = Field(default="Concept")
+    description: str = Field(default="")
     attributes: Optional[List[LoreAttribute]] = None
 
 class ActionDraftModel(BaseModel):
-    id: int
-    type: str # 'stat' or 'item' or 'lore' or 'skill'
-    title: str
-    desc: str
-    context: str
+    id: Optional[int] = Field(default=1)
+    type: str = Field(default="stat") # 'stat' or 'item' or 'lore' or 'skill'
+    title: str = Field(default="Draft")
+    desc: str = Field(default="")
+    context: str = Field(default="")
     stat_changes: Optional[List[StatChange]] = None
     list_additions: Optional[List[ListAddition]] = None
     lore_entity: Optional[LoreEntityDraft] = None
@@ -51,9 +53,9 @@ class TacticalResponse(BaseModel):
     drafts: List[ActionDraftModel]
 
 class LoreRelationshipDraft(BaseModel):
-    source_entity_name: str
-    target_entity_name: str
-    relationship_type: str
+    source_entity_name: str = Field(default="")
+    target_entity_name: str = Field(default="")
+    relationship_type: str = Field(default="")
 
 class AmbientResponse(BaseModel):
     drafts: List[ActionDraftModel]
@@ -70,7 +72,7 @@ def map_drafts_for_frontend(drafts: List[ActionDraftModel], relationships: Optio
     # Actually, returning them as a separate list is better, but since it breaks signature, let's just make a mock draft.
     if relationships:
         rel_draft = {
-            "id": 99999,
+            "id": int(time.time() * 1000),
             "type": "relationships",
             "title": "New Lore Relationships",
             "desc": f"Discovered {len(relationships)} new relationships in the text.",
@@ -112,7 +114,8 @@ def map_drafts_for_frontend(drafts: List[ActionDraftModel], relationships: Optio
         result.append(draft_dict)
     return result
 
-def extract_tactical_drafts(system_box_text: str, context_text: str, current_stats: dict) -> List[dict]:
+def extract_tactical_drafts(system_box_text: str, context_text: str, current_stats: Optional[dict] = None) -> List[dict]:
+    stats_payload = current_stats if current_stats is not None else {}
     prompt = f"""
     You are an RPG Engine for a LitRPG web novel. The author just wrote a "System Box" notification.
     Analyze the text and extract any explicit character stat changes or new items/skills.
@@ -121,7 +124,7 @@ def extract_tactical_drafts(system_box_text: str, context_text: str, current_sta
     If the change is an acquired ability, title, or item (e.g. "Skill Acquired: Fireball", "You found a Rusty Sword"), put it in `list_additions`. Use appropriate list names that match the character sheet (e.g. 'Skills', 'Inventory', 'Titles', 'Vices').
 
     Current Character Stats:
-    {current_stats}
+    {stats_payload}
 
     System Box Text:
     {system_box_text}

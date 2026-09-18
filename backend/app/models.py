@@ -10,6 +10,7 @@ class Project(Base):
     chapters = relationship('Chapter', back_populates='project', cascade='all, delete-orphan', lazy='selectin')
     lore_entities = relationship('LoreEntity', back_populates='project', cascade='all, delete-orphan', lazy='selectin')
     characters = relationship('Character', back_populates='project', cascade='all, delete-orphan', lazy='selectin')
+    lore_relationships = relationship('LoreRelationship', back_populates='project', cascade='all, delete-orphan', lazy='selectin')
 
 class Chapter(Base):
     __tablename__ = 'chapters'
@@ -43,6 +44,7 @@ class LoreRelationship(Base):
     
     source = relationship('LoreEntity', foreign_keys=[source_id])
     target = relationship('LoreEntity', foreign_keys=[target_id])
+    project = relationship('Project', back_populates='lore_relationships')
 
 class Character(Base):
     __tablename__ = 'characters'

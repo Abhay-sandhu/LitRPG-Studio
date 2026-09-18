@@ -1,11 +1,13 @@
+import os
 from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker, AsyncSession
 from sqlalchemy.orm import declarative_base
 from sqlalchemy import event
 from sqlalchemy.engine import Engine
 
 DATABASE_URL = "sqlite+aiosqlite:///./litrpg.db"
+ECHO_SQL = os.getenv("SQL_ECHO", "false").lower() in ("true", "1", "yes")
 
-engine = create_async_engine(DATABASE_URL, echo=True)
+engine = create_async_engine(DATABASE_URL, echo=ECHO_SQL)
 
 @event.listens_for(Engine, "connect")
 def set_sqlite_pragma(dbapi_connection, connection_record):

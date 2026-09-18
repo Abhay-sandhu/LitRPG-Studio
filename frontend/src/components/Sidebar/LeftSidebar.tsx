@@ -10,10 +10,11 @@ import {
   Zap,
   Sword,
   Users,
+  Trash2,
 } from 'lucide-react'
 
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { fetchLore, createChapter } from '../../api'
+import { fetchLore, createChapter, deleteChapter } from '../../api'
 
 export interface ChapterItem {
   id: number
@@ -60,6 +61,28 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = React.memo(({
       queryClient.setQueryData(['chapters', projectId], (old: any) => old ? [...old, newChapter] : [newChapter])
       queryClient.invalidateQueries({ queryKey: ['chapters'] })
       onSelectChapter(newChapter.id)
+    },
+    onError: (err: any) => {
+      alert(`Failed to create chapter: ${err?.message || err}`)
+    }
+  })
+
+  const deleteChapterMutation = useMutation({
+    mutationFn: (chapterId: number) => deleteChapter(chapterId),
+    onSuccess: (_, deletedId) => {
+      queryClient.setQueryData(['chapters', projectId], (old: any) =>
+        old ? old.filter((ch: any) => ch.id !== deletedId) : []
+      )
+      queryClient.invalidateQueries({ queryKey: ['chapters'] })
+      if (activeChapterId === deletedId) {
+        const remaining = chapters.filter(c => c.id !== deletedId)
+        if (remaining.length > 0) {
+          onSelectChapter(remaining[0].id)
+        }
+      }
+    },
+    onError: (err: any) => {
+      alert(`Failed to delete chapter: ${err?.message || err}`)
     }
   })
 
@@ -181,10 +204,16 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = React.memo(({
             </div>
 
             {filteredChapters.map((ch) => (
-              <button
+              <div
                 key={ch.id}
-                type="button"
+                role="button"
+                tabIndex={0}
                 onClick={() => onSelectChapter(ch.id)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    onSelectChapter(ch.id)
+                  }
+                }}
                 className={`w-full group flex items-center justify-between px-2.5 py-1.5 rounded-md cursor-pointer transition-colors ${
                   activeChapterId === ch.id
                     ? 'bg-sky-50 dark:bg-sky-500/10 text-sky-700 dark:text-sky-300 border border-sky-200 dark:border-sky-500/20'
@@ -195,10 +224,25 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = React.memo(({
                   <FileText className={`w-3.5 h-3.5 shrink-0 ${activeChapterId === ch.id ? 'text-sky-600 dark:text-sky-400' : 'text-slate-400 dark:text-slate-500'}`} />
                   <span className="truncate text-xs">{ch.title}</span>
                 </div>
-                <span className="text-[10px] text-slate-400 dark:text-slate-500 group-hover:text-slate-500 dark:group-hover:text-slate-400 shrink-0">
-                  {ch.words}w
-                </span>
-              </button>
+                <div className="flex items-center gap-1.5 shrink-0">
+                  <span className="text-[10px] text-slate-400 dark:text-slate-500 group-hover:text-slate-500 dark:group-hover:text-slate-400">
+                    {ch.words}w
+                  </span>
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      if (window.confirm(`Are you sure you want to delete "${ch.title}"?`)) {
+                        deleteChapterMutation.mutate(ch.id)
+                      }
+                    }}
+                    className="opacity-0 group-hover:opacity-100 p-0.5 text-slate-400 hover:text-rose-600 dark:hover:text-rose-400 rounded transition-opacity"
+                    title="Delete Chapter"
+                  >
+                    <Trash2 className="w-3 h-3" />
+                  </button>
+                </div>
+              </div>
             ))}
           </>
         ) : (

@@ -35,6 +35,57 @@ interface RightInspectorProps {
   activeChapterId?: number
 }
 
+function getAllStatVariables(stats: Record<string, any>): Record<string, number> {
+  const vars: Record<string, number> = {}
+  if (!stats || typeof stats !== 'object') return vars
+
+  for (const [key, val] of Object.entries(stats)) {
+    if (typeof val === 'number') {
+      vars[key.toLowerCase()] = val
+      vars[key] = val
+    } else if (typeof val === 'string' && !isNaN(Number(val)) && val.trim() !== '') {
+      vars[key.toLowerCase()] = Number(val)
+      vars[key] = Number(val)
+    } else if (typeof val === 'object' && val !== null && !Array.isArray(val)) {
+      for (const [innerKey, innerVal] of Object.entries(val)) {
+        if (typeof innerVal === 'number') {
+          vars[innerKey.toLowerCase()] = innerVal
+          vars[innerKey] = innerVal
+        } else if (typeof innerVal === 'string' && !isNaN(Number(innerVal)) && innerVal.trim() !== '') {
+          vars[innerKey.toLowerCase()] = Number(innerVal)
+          vars[innerKey] = Number(innerVal)
+        }
+      }
+    }
+  }
+  return vars
+}
+
+export function evaluateFormula(formula: string, stats: Record<string, any>): number | null {
+  if (!formula || typeof formula !== 'string') return null
+  try {
+    const vars = getAllStatVariables(stats)
+    const tokenized = formula.replace(/[A-Za-z_][A-Za-z0-9_]*/g, (match) => {
+      if (match in vars) return String(vars[match])
+      const lower = match.toLowerCase()
+      if (lower in vars) return String(vars[lower])
+      return match
+    })
+
+    if (!/^[0-9+\-*/().\s]+$/.test(tokenized)) {
+      return null
+    }
+
+    const result = Function(`"use strict"; return (${tokenized})`)()
+    if (typeof result === 'number' && !isNaN(result) && isFinite(result)) {
+      return Math.round(result * 100) / 100
+    }
+    return null
+  } catch {
+    return null
+  }
+}
+
 export const RightInspector: React.FC<RightInspectorProps> = React.memo(({
   collapsed,
   onToggleCollapse,
@@ -61,7 +112,7 @@ export const RightInspector: React.FC<RightInspectorProps> = React.memo(({
   // Fetch Ledger for protagonist
   const { data: ledger = [], isLoading: isLedgerLoading } = useQuery({
     queryKey: ['ledger', protagonist?.id],
-    queryFn: () => fetchCharacterLedger(protagonist.id),
+    queryFn: () => (protagonist?.id ? fetchCharacterLedger(protagonist.id) : Promise.resolve([])),
     enabled: !!protagonist?.id
   })
   const queryClient = useQueryClient()
@@ -113,15 +164,36 @@ export const RightInspector: React.FC<RightInspectorProps> = React.memo(({
         
         Object.entries(draft.changes).forEach(([statKey, changeVal]: [string, any]) => {
           // A. Handle numeric / scalar stat changes
-          if (changeVal.new !== undefined) {
+          let targetVal = changeVal.new
+          if (targetVal === undefined && changeVal.delta !== undefined) {
+            let existingVal: any = undefined
+            for (const [, attributes] of Object.entries(updatedStats)) {
+              if (typeof attributes === 'object' && attributes !== null && !Array.isArray(attributes) && statKey in attributes) {
+                existingVal = (attributes as any)[statKey]
+                break
+              }
+            }
+            if (existingVal === undefined && updatedStats[statKey] !== undefined) {
+              existingVal = updatedStats[statKey]
+            }
+            const numCurrent = typeof existingVal === 'number' ? existingVal : parseFloat(existingVal)
+            const numDelta = typeof changeVal.delta === 'number' ? changeVal.delta : parseFloat(changeVal.delta)
+            if (!isNaN(numCurrent) && !isNaN(numDelta)) {
+              targetVal = numCurrent + numDelta
+            } else if (!isNaN(numDelta)) {
+              targetVal = numDelta
+            }
+          }
+
+          if (targetVal !== undefined) {
             let nestedFound = false
             for (const [category, attributes] of Object.entries(updatedStats)) {
               if (typeof attributes === 'object' && attributes !== null && !Array.isArray(attributes) && statKey in attributes) {
                 // Prevent hallucination from overwriting an array with a scalar
                 if (!Array.isArray((attributes as any)[statKey])) {
-                    updatedStats[category] = { ...attributes, [statKey]: changeVal.new }
+                    updatedStats[category] = { ...attributes, [statKey]: targetVal }
                 } else {
-                    console.warn(`Type safety: Refused to overwrite array ${statKey} with scalar ${changeVal.new}`)
+                    console.warn(`Type safety: Refused to overwrite array ${statKey} with scalar ${targetVal}`)
                 }
                 nestedFound = true
                 break
@@ -130,9 +202,9 @@ export const RightInspector: React.FC<RightInspectorProps> = React.memo(({
             if (!nestedFound) {
               // Prevent hallucination from overwriting a root array with a scalar
               if (updatedStats[statKey] !== undefined && Array.isArray(updatedStats[statKey])) {
-                  console.warn(`Type safety: Refused to overwrite root array ${statKey} with scalar ${changeVal.new}`)
+                  console.warn(`Type safety: Refused to overwrite root array ${statKey} with scalar ${targetVal}`)
               } else {
-                  updatedStats[statKey] = changeVal.new
+                  updatedStats[statKey] = targetVal
               }
             }
           }
@@ -229,6 +301,7 @@ export const RightInspector: React.FC<RightInspectorProps> = React.memo(({
       setDrafts((prev) => prev.filter((d) => d.id !== id))
     } catch (err) {
       console.error("Failed to accept draft:", err)
+      alert("Failed to accept draft. Please try again.")
       processedDrafts.current.delete(id)
     }
   }
@@ -401,40 +474,63 @@ export const RightInspector: React.FC<RightInspectorProps> = React.memo(({
                     <span className="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
                         Derived Formulas
                     </span>
-                    <button
-                        type="button"
-                        onClick={async () => {
-                            if (isEditingFormulas) {
-                                // Save
-                                const finalFormulas = editedFormulaRows.reduce((acc, row) => {
-                                  if (row.key) acc[row.key] = row.value
-                                  return acc
-                                }, {} as Record<string, string>)
-                                
-                                if (newFormulaKey.trim() && newFormulaValue.trim()) {
-                                  finalFormulas[newFormulaKey.trim()] = newFormulaValue.trim()
+                    <div className="flex items-center gap-1.5">
+                        {isEditingFormulas && (
+                            <button
+                                type="button"
+                                onClick={() => {
+                                    setIsEditingFormulas(false)
+                                    setEditedFormulaRows([])
+                                    setNewFormulaKey("")
+                                    setNewFormulaValue("")
+                                }}
+                                className="text-[10px] bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 px-2 py-1 rounded text-slate-500 hover:text-slate-700 dark:text-slate-400 font-medium transition-colors"
+                            >
+                                Cancel
+                            </button>
+                        )}
+                        <button
+                            type="button"
+                            onClick={async () => {
+                                if (isEditingFormulas) {
+                                    // Save
+                                    try {
+                                        const finalFormulas = editedFormulaRows.reduce((acc, row) => {
+                                          const trimmedKey = row.key.trim()
+                                          if (trimmedKey) acc[trimmedKey] = row.value.trim()
+                                          return acc
+                                        }, {} as Record<string, string>)
+                                        
+                                        if (newFormulaKey.trim() && newFormulaValue.trim()) {
+                                          finalFormulas[newFormulaKey.trim()] = newFormulaValue.trim()
+                                        }
+                                        
+                                        await updateCharacter(protagonist.id, { formulas: finalFormulas })
+                                        queryClient.invalidateQueries({ queryKey: ['characters'] })
+                                        setIsEditingFormulas(false)
+                                    } catch (err) {
+                                        console.error("Failed to save formulas:", err)
+                                        alert("Failed to save formulas. Please try again.")
+                                    }
+                                } else {
+                                    // Start editing
+                                    const existingFormulas = protagonist.formulas || {}
+                                    const rows = Object.entries(existingFormulas).map(([k, v]) => ({
+                                      id: Math.random().toString(36).substr(2, 9),
+                                      key: k,
+                                      value: v as string
+                                    }))
+                                    setEditedFormulaRows(rows)
+                                    setNewFormulaKey("")
+                                    setNewFormulaValue("")
+                                    setIsEditingFormulas(true)
                                 }
-                                
-                                await updateCharacter(protagonist.id, { formulas: finalFormulas })
-                                queryClient.invalidateQueries({ queryKey: ['characters'] })
-                            } else {
-                                // Start editing
-                                const existingFormulas = protagonist.formulas || {}
-                                const rows = Object.entries(existingFormulas).map(([k, v]) => ({
-                                  id: Math.random().toString(36).substr(2, 9),
-                                  key: k,
-                                  value: v as string
-                                }))
-                                setEditedFormulaRows(rows)
-                                setNewFormulaKey("")
-                                setNewFormulaValue("")
-                            }
-                            setIsEditingFormulas(!isEditingFormulas)
-                        }}
-                        className="text-[10px] bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 px-2 py-1 rounded text-slate-600 dark:text-slate-300 font-medium transition-colors"
-                    >
-                        {isEditingFormulas ? 'Save' : 'Edit'}
-                    </button>
+                            }}
+                            className="text-[10px] bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 px-2 py-1 rounded text-slate-600 dark:text-slate-300 font-medium transition-colors"
+                        >
+                            {isEditingFormulas ? 'Save' : 'Edit'}
+                        </button>
+                    </div>
                 </div>
 
                 {isEditingFormulas ? (
@@ -485,8 +581,8 @@ export const RightInspector: React.FC<RightInspectorProps> = React.memo(({
                                 placeholder="Formula"
                                 className="flex-[2] bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded px-2 py-1 text-xs font-mono"
                                 onKeyDown={(e) => {
-                                    if (e.key === 'Enter' && newFormulaKey && newFormulaValue) {
-                                        setEditedFormulaRows(prev => [...prev, { id: Math.random().toString(36).substr(2, 9), key: newFormulaKey, value: newFormulaValue }])
+                                    if (e.key === 'Enter' && newFormulaKey.trim() && newFormulaValue.trim()) {
+                                        setEditedFormulaRows(prev => [...prev, { id: Math.random().toString(36).substr(2, 9), key: newFormulaKey.trim(), value: newFormulaValue.trim() }])
                                         setNewFormulaKey("")
                                         setNewFormulaValue("")
                                     }
@@ -494,8 +590,8 @@ export const RightInspector: React.FC<RightInspectorProps> = React.memo(({
                             />
                             <button
                                 onClick={() => {
-                                    if (newFormulaKey && newFormulaValue) {
-                                        setEditedFormulaRows(prev => [...prev, { id: Math.random().toString(36).substr(2, 9), key: newFormulaKey, value: newFormulaValue }])
+                                    if (newFormulaKey.trim() && newFormulaValue.trim()) {
+                                        setEditedFormulaRows(prev => [...prev, { id: Math.random().toString(36).substr(2, 9), key: newFormulaKey.trim(), value: newFormulaValue.trim() }])
                                         setNewFormulaKey("")
                                         setNewFormulaValue("")
                                     }
@@ -510,12 +606,20 @@ export const RightInspector: React.FC<RightInspectorProps> = React.memo(({
                 ) : (
                     protagonist.formulas && Object.keys(protagonist.formulas).length > 0 ? (
                         <div className="space-y-1">
-                            {Object.entries(protagonist.formulas).map(([key, formula]: [string, any]) => (
-                                <div key={key} className="text-[10px] text-slate-500 font-mono bg-slate-50 dark:bg-slate-900/50 p-2 rounded border border-slate-200 dark:border-slate-800/50 flex justify-between">
-                                    <span className="font-semibold">{key}</span>
-                                    <span>= {formula}</span>
-                                </div>
-                            ))}
+                            {Object.entries(protagonist.formulas).map(([key, formula]: [string, any]) => {
+                                const computed = evaluateFormula(String(formula), protagonist.stats || {})
+                                return (
+                                    <div key={key} className="text-[10px] text-slate-500 font-mono bg-slate-50 dark:bg-slate-900/50 p-2 rounded border border-slate-200 dark:border-slate-800/50 flex justify-between items-center">
+                                        <span className="font-semibold text-slate-700 dark:text-slate-300">{key}</span>
+                                        <div className="flex items-center gap-1.5">
+                                            {computed !== null && (
+                                                <span className="text-emerald-600 dark:text-emerald-400 font-bold">{computed}</span>
+                                            )}
+                                            <span className="text-slate-400 dark:text-slate-500">(= {formula})</span>
+                                        </div>
+                                    </div>
+                                )
+                            })}
                         </div>
                     ) : (
                         <div className="text-[10px] text-slate-400 italic py-1">No formulas defined.</div>
