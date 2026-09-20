@@ -7,7 +7,8 @@ import { RightInspector } from './components/Inspector/RightInspector'
 import type { DraftItem } from './components/Inspector/RightInspector'
 import { GlobalNav } from './components/Navigation/GlobalNav'
 import type { ViewType } from './components/Navigation/GlobalNav'
-import { ProjectsView, AnalyticsView, SettingsView } from './components/Views/PlaceholderViews'
+import { ProjectsView, SettingsView } from './components/Views/PlaceholderViews'
+import { AnalyticsView } from './components/Views/AnalyticsView'
 import { BibleView } from './components/Views/BibleView'
 import { ConstellationView } from './components/Views/ConstellationView'
 import { fetchChapters, updateChapter, triggerTacticalAI, triggerAmbientAI } from './api'
@@ -266,7 +267,7 @@ export default function App() {
       {currentView === 'projects' && <ProjectsView />}
       {currentView === 'bible' && <BibleView projectId={projectId} />}
       {currentView === 'constellation' && <ConstellationView projectId={projectId} />}
-      {currentView === 'analytics' && <AnalyticsView />}
+      {currentView === 'analytics' && <AnalyticsView projectId={projectId} />}
       {currentView === 'settings' && <SettingsView />}
     </div>
   )

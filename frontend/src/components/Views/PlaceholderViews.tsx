@@ -1,5 +1,5 @@
 import React from 'react'
-import { Library, LineChart, Settings, Construction } from 'lucide-react'
+import { Library, Settings, Construction } from 'lucide-react'
 
 interface PlaceholderViewProps {
   title: string
@@ -33,14 +33,6 @@ export const ProjectsView = () => (
 )
 
 
-
-export const AnalyticsView = () => (
-  <PlaceholderView
-    title="Analytics & Goals"
-    icon={LineChart}
-    description="Track your writing velocity, set daily word count goals, and monitor character stat distributions over time."
-  />
-)
 
 export const SettingsView = () => (
   <PlaceholderView
