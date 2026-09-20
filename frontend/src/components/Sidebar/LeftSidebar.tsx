@@ -11,6 +11,7 @@ import {
   Sword,
   Users,
   Trash2,
+  Download,
 } from 'lucide-react'
 
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
@@ -20,6 +21,7 @@ export interface ChapterItem {
   id: number
   title: string
   words: number
+  content?: string
 }
 
 interface LeftSidebarProps {
@@ -66,6 +68,42 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = React.memo(({
       alert(`Failed to create chapter: ${err?.message || err}`)
     }
   })
+
+  const handleExport = () => {
+    let combinedHtml = `<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Manuscript Export</title>
+<style>
+  body { font-family: serif; max-width: 800px; margin: 0 auto; padding: 2em; line-height: 1.6; }
+  h1 { text-align: center; margin-top: 2em; margin-bottom: 1em; page-break-before: always; }
+  p { text-indent: 1.5em; margin-top: 0; margin-bottom: 0; }
+</style>
+</head>
+<body>
+`
+    chapters.forEach(ch => {
+      combinedHtml += `\n<h1>${ch.title}</h1>\n`
+      if (ch.content) {
+        combinedHtml += ch.content
+      } else {
+        combinedHtml += `<p><em>(Empty chapter)</em></p>`
+      }
+    })
+
+    combinedHtml += `\n</body>\n</html>`
+
+    const blob = new Blob([combinedHtml], { type: 'text/html' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `Project_Export.html`
+    document.body.appendChild(a)
+    a.click()
+    document.body.removeChild(a)
+    URL.revokeObjectURL(url)
+  }
 
   const deleteChapterMutation = useMutation({
     mutationFn: (chapterId: number) => deleteChapter(chapterId),
@@ -244,6 +282,16 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = React.memo(({
                 </div>
               </div>
             ))}
+            <div className="mt-6 px-2">
+              <button
+                type="button"
+                onClick={handleExport}
+                className="w-full flex items-center justify-center gap-2 px-3 py-2 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 rounded-md text-xs font-semibold transition-colors"
+              >
+                <Download className="w-3.5 h-3.5" />
+                Export Manuscript (HTML)
+              </button>
+            </div>
           </>
         ) : (
           <>
