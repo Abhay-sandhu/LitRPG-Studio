@@ -9,6 +9,7 @@ import { GlobalNav } from './components/Navigation/GlobalNav'
 import type { ViewType } from './components/Navigation/GlobalNav'
 import { ProjectsView, AnalyticsView, SettingsView } from './components/Views/PlaceholderViews'
 import { BibleView } from './components/Views/BibleView'
+import { ConstellationView } from './components/Views/ConstellationView'
 import { fetchChapters, updateChapter, triggerTacticalAI, triggerAmbientAI } from './api'
 import './App.css'
 
@@ -264,6 +265,7 @@ export default function App() {
 
       {currentView === 'projects' && <ProjectsView />}
       {currentView === 'bible' && <BibleView projectId={projectId} />}
+      {currentView === 'constellation' && <ConstellationView projectId={projectId} />}
       {currentView === 'analytics' && <AnalyticsView />}
       {currentView === 'settings' && <SettingsView />}
     </div>

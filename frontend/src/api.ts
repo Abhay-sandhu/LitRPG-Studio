@@ -158,6 +158,11 @@ export const createLoreRelationship = async (payload: { project_id: number; sour
     return data
 }
 
+export const fetchLoreRelationships = async (projectId: number) => {
+    const { data } = await api.get('/lore-relationships?project_id=' + projectId)
+    return data
+}
+
 export const deleteLoreRelationship = async (relId: number): Promise<void> => {
     await api.delete('/lore-relationships/' + relId)
 }

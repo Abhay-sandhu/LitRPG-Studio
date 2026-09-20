@@ -6,9 +6,10 @@ import {
   BookOpen,
   LineChart,
   Settings,
+  Network
 } from 'lucide-react'
 
-export type ViewType = 'editor' | 'projects' | 'bible' | 'analytics' | 'settings'
+export type ViewType = 'editor' | 'projects' | 'bible' | 'constellation' | 'analytics' | 'settings'
 
 interface GlobalNavProps {
   isOpen: boolean
@@ -27,6 +28,7 @@ export const GlobalNav: React.FC<GlobalNavProps> = ({
     { id: 'editor', label: 'Writing Editor', icon: PenTool },
     { id: 'projects', label: 'My Projects', icon: Library },
     { id: 'bible', label: 'Global Story Bible', icon: BookOpen },
+    { id: 'constellation', label: 'Graph Constellation', icon: Network },
     { id: 'analytics', label: 'Analytics & Goals', icon: LineChart },
     { id: 'settings', label: 'Settings', icon: Settings },
   ]
