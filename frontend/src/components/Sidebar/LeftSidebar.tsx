@@ -12,6 +12,7 @@ import {
   Users,
   Trash2,
   Download,
+  Upload,
 } from 'lucide-react'
 
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
@@ -51,6 +52,8 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = React.memo(({
   const queryClient = useQueryClient()
   const [activeTab, setActiveTab] = useState<'chapters' | 'bible'>('chapters')
   const [searchQuery, setSearchQuery] = useState('')
+  const fileInputRef = React.useRef<HTMLInputElement>(null)
+  const [isImporting, setIsImporting] = useState(false)
 
   const { data: bibleEntities = [] } = useQuery({
     queryKey: ['lore', projectId],
@@ -58,7 +61,13 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = React.memo(({
   })
   
   const createChapterMutation = useMutation({
-    mutationFn: () => createChapter({ project_id: projectId, title: 'Untitled Chapter', words: 0, order: chapters.length + 1 }),
+    mutationFn: (data?: {title?: string, content?: string, order?: number}) => createChapter({ 
+      project_id: projectId, 
+      title: data?.title || 'Untitled Chapter', 
+      content: data?.content || '',
+      words: data?.content ? data.content.split(/\s+/).length : 0, 
+      order: data?.order ?? chapters.length + 1 
+    }),
     onSuccess: (newChapter) => {
       queryClient.setQueryData(['chapters', projectId], (old: any) => old ? [...old, newChapter] : [newChapter])
       queryClient.invalidateQueries({ queryKey: ['chapters'] })
@@ -68,6 +77,48 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = React.memo(({
       alert(`Failed to create chapter: ${err?.message || err}`)
     }
   })
+
+  const handleImport = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+
+    setIsImporting(true)
+    try {
+      const text = await file.text()
+      // Split by 'Chapter X' or '# Chapter X'
+      const rawChunks = text.split(/(?:^|\n)(?=#?\s*Chapter\s+\d+|#?\s*Prologue)/i)
+      
+      const chunks = rawChunks.filter(c => c.trim().length > 0)
+      
+      if (chunks.length === 0) {
+        alert("No chapters found! Make sure they start with 'Chapter X'.")
+        return
+      }
+
+      for (let i = 0; i < chunks.length; i++) {
+        const chunk = chunks[i]
+        const lines = chunk.split('\n')
+        const titleLine = lines[0].replace(/#/g, '').trim()
+        const content = lines.slice(1).join('\n').trim()
+        
+        // Convert basic newlines to paragraphs for TipTap
+        const htmlContent = content.split('\n\n').map(p => `<p>${p.replace(/\n/g, '<br>')}</p>`).join('')
+
+        await createChapterMutation.mutateAsync({
+          title: titleLine || `Chapter ${i + 1}`,
+          content: htmlContent,
+          order: chapters.length + i + 1
+        })
+      }
+      alert(`Successfully imported ${chunks.length} chapters!`)
+    } catch (err) {
+      console.error(err)
+      alert("Error importing manuscript")
+    } finally {
+      setIsImporting(false)
+      if (fileInputRef.current) fileInputRef.current.value = ''
+    }
+  }
 
   const handleExport = () => {
     let combinedHtml = `<!DOCTYPE html>
@@ -227,19 +278,37 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = React.memo(({
 
       {/* List Content */}
       <div className="flex-1 overflow-y-auto p-2 space-y-1">
-        {activeTab === 'chapters' ? (
-          <>
-            <div className="flex items-center justify-between px-2 py-1 text-[11px] font-semibold uppercase tracking-wider text-slate-500">
-              <span>Volume 1</span>
-              <button
-                type="button"
-                onClick={() => createChapterMutation.mutate()}
-                className="hover:text-sky-600 dark:hover:text-sky-400 transition-colors"
-                title="Add Chapter"
-              >
-                <Plus className="w-3.5 h-3.5" />
-              </button>
-            </div>
+          {activeTab === 'chapters' ? (
+            <>
+              <div className="flex items-center justify-between px-2 py-1 text-[11px] font-semibold uppercase tracking-wider text-slate-500">
+                <span>Volume 1</span>
+                <div className="flex items-center gap-1">
+                  <input 
+                    type="file" 
+                    accept=".txt,.md" 
+                    className="hidden" 
+                    ref={fileInputRef} 
+                    onChange={handleImport} 
+                  />
+                  <button
+                    type="button"
+                    onClick={() => fileInputRef.current?.click()}
+                    disabled={isImporting}
+                    className={`hover:text-sky-600 dark:hover:text-sky-400 transition-colors ${isImporting ? 'opacity-50' : ''}`}
+                    title="Import Manuscript (.txt, .md)"
+                  >
+                    <Upload className="w-3.5 h-3.5" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => createChapterMutation.mutate({})}
+                    className="hover:text-sky-600 dark:hover:text-sky-400 transition-colors ml-1"
+                    title="Add Chapter"
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              </div>
 
             {filteredChapters.map((ch) => (
               <div
