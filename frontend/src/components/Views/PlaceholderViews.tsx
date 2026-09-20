@@ -1,5 +1,5 @@
 import React from 'react'
-import { Library, Settings, Construction } from 'lucide-react'
+import { Settings, Construction } from 'lucide-react'
 
 interface PlaceholderViewProps {
   title: string
@@ -24,13 +24,7 @@ const PlaceholderView: React.FC<PlaceholderViewProps> = ({ title, icon: Icon, de
   )
 }
 
-export const ProjectsView = () => (
-  <PlaceholderView
-    title="My Projects"
-    icon={Library}
-    description="Manage all your LitRPG series, novels, and short stories from a single dashboard. View word counts, cover art, and publishing statuses."
-  />
-)
+
 
 
 

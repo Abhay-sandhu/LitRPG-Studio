@@ -112,7 +112,7 @@ export const deleteChapter = async (chapterId: number): Promise<void> => {
     await api.delete('/chapters/' + chapterId)
 }
 
-export const fetchProjects = async (): Promise<Array<{ id: number; title: string }>> => {
+export const fetchProjects = async (): Promise<Array<{ id: number; title: string, description: string | null }>> => {
     const { data } = await api.get('/projects')
     return data
 }

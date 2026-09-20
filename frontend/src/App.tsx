@@ -7,7 +7,8 @@ import { RightInspector } from './components/Inspector/RightInspector'
 import type { DraftItem } from './components/Inspector/RightInspector'
 import { GlobalNav } from './components/Navigation/GlobalNav'
 import type { ViewType } from './components/Navigation/GlobalNav'
-import { ProjectsView, SettingsView } from './components/Views/PlaceholderViews'
+import { SettingsView } from './components/Views/PlaceholderViews'
+import { ProjectsView } from './components/Views/ProjectsView'
 import { AnalyticsView } from './components/Views/AnalyticsView'
 import { BibleView } from './components/Views/BibleView'
 import { ConstellationView } from './components/Views/ConstellationView'
@@ -24,7 +25,7 @@ export default function App() {
   const [navOpen, setNavOpen] = useState(false)
   const [currentView, setCurrentView] = useState<ViewType>('editor')
 
-  const projectId = 1 // Hardcoded for now
+  const [projectId, setProjectId] = useState<number>(1)
   
   const { data: chapters = [] } = useQuery({
     queryKey: ['chapters', projectId],
@@ -264,7 +265,7 @@ export default function App() {
         />
       </div>
 
-      {currentView === 'projects' && <ProjectsView />}
+      {currentView === 'projects' && <ProjectsView activeProjectId={projectId} onSelectProject={setProjectId} />}
       {currentView === 'bible' && <BibleView projectId={projectId} />}
       {currentView === 'constellation' && <ConstellationView projectId={projectId} />}
       {currentView === 'analytics' && <AnalyticsView projectId={projectId} />}
