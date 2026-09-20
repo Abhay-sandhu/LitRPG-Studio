@@ -185,3 +185,33 @@ def extract_ambient_lore(narrative_text: str, wiki_index: list) -> List[dict]:
     except Exception as e:
         print(f"Ambient AI Error: {e}")
         return []
+
+def generate_chat_response(system_prompt: str, messages: list) -> str:
+    client = get_client()
+    if not client:
+        return "Error: GEMINI_API_KEY is missing."
+
+    from google.genai import types
+
+    contents = []
+    for msg in messages:
+        contents.append(
+            types.Content(
+                role=msg.role,
+                parts=[types.Part.from_text(msg.content)]
+            )
+        )
+
+    try:
+        response = client.models.generate_content(
+            model='gemini-2.5-flash',
+            contents=contents,
+            config=types.GenerateContentConfig(
+                system_instruction=system_prompt,
+                temperature=0.7,
+            ),
+        )
+        return response.text
+    except Exception as e:
+        print(f"Chat AI Error: {e}")
+        return f"Sorry, an error occurred: {e}"

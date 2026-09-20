@@ -12,7 +12,7 @@ import {
   Zap,
 } from 'lucide-react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { fetchCharacters, fetchCharacterLedger, acceptActionDraft, createLore, updateCharacter, createLoreRelationshipsBulk } from '../../api'
+import { fetchCharacters, fetchCharacterLedger, acceptActionDraft, createLore, updateCharacter, createLoreRelationshipsBulk, sendChatMessage } from '../../api'
 
 export interface DraftItem {
   id: number
@@ -95,11 +95,19 @@ export const RightInspector: React.FC<RightInspectorProps> = React.memo(({
   onScanChapter,
   activeChapterId,
 }) => {
-  const [activeTab, setActiveTab] = useState<'sheet' | 'ledger' | 'drafts'>('sheet')
+  const [activeTab, setActiveTab] = useState<'sheet' | 'ledger' | 'drafts' | 'chat'>('sheet')
   const [isEditingFormulas, setIsEditingFormulas] = useState(false)
   const [editedFormulaRows, setEditedFormulaRows] = useState<Array<{id: string, key: string, value: string}>>([])
   const [newFormulaKey, setNewFormulaKey] = useState('')
   const [newFormulaValue, setNewFormulaValue] = useState('')
+
+  // Chat State
+  const [chatMessages, setChatMessages] = useState<Array<{role: string, content: string}>>([
+    { role: 'model', content: 'Hello! I am your AI Co-writer. How can I help you brainstorm today?' }
+  ])
+  const [chatInput, setChatInput] = useState('')
+  const [isChatLoading, setIsChatLoading] = useState(false)
+  const chatScrollRef = useRef<HTMLDivElement>(null)
 
   // Fetch Characters
   const { data: characters = [], isLoading: isCharsLoading } = useQuery({
@@ -121,6 +129,38 @@ export const RightInspector: React.FC<RightInspectorProps> = React.memo(({
   const handleDismiss = (id: number) => {
     setDrafts((prev) => prev.filter((d) => d.id !== id))
   }
+
+  const handleSendMessage = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!chatInput.trim() || isChatLoading) return
+
+    const userMessage = { role: 'user', content: chatInput.trim() }
+    const updatedMessages = [...chatMessages, userMessage]
+    setChatMessages(updatedMessages)
+    setChatInput('')
+    setIsChatLoading(true)
+
+    try {
+      const result = await sendChatMessage(projectId || 1, updatedMessages)
+      if (result.status === 'ok') {
+        setChatMessages([...updatedMessages, { role: 'model', content: result.response }])
+      } else {
+        throw new Error("Failed to get response")
+      }
+    } catch (err) {
+      console.error(err)
+      setChatMessages([...updatedMessages, { role: 'model', content: 'Oops, something went wrong communicating with the AI.' }])
+    } finally {
+      setIsChatLoading(false)
+    }
+  }
+
+  // Auto-scroll chat
+  React.useEffect(() => {
+    if (chatScrollRef.current) {
+      chatScrollRef.current.scrollTop = chatScrollRef.current.scrollHeight
+    }
+  }, [chatMessages])
 
   const handleAccept = async (id: number) => {
     if (processedDrafts.current.has(id)) return
@@ -355,6 +395,17 @@ export const RightInspector: React.FC<RightInspectorProps> = React.memo(({
               )}
             </div>
           </button>
+          <button
+            onClick={() => { setActiveTab('chat'); onToggleCollapse(); }}
+            className={`p-2 rounded flex justify-center items-center transition-colors ${
+              activeTab === 'chat' 
+                ? 'bg-indigo-50 dark:bg-indigo-500/20 text-indigo-600 dark:text-indigo-400' 
+                : 'text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-slate-200'
+            }`}
+            title="AI Brainstorming Chat"
+          >
+            <Zap className="w-4 h-4" />
+          </button>
         </div>
       </aside>
     )
@@ -413,6 +464,17 @@ export const RightInspector: React.FC<RightInspectorProps> = React.memo(({
                 {drafts.length}
               </span>
             )}
+          </button>
+          <button
+            type="button"
+            onClick={() => setActiveTab('chat')}
+            className={`flex-1 py-1 rounded-md font-medium transition-colors ${
+              activeTab === 'chat'
+                ? 'bg-white dark:bg-indigo-500/20 text-indigo-700 dark:text-indigo-300 border border-slate-200 dark:border-indigo-500/30 shadow-sm'
+                : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
+            }`}
+          >
+            Chat
           </button>
         </div>
       </div>
@@ -668,9 +730,9 @@ export const RightInspector: React.FC<RightInspectorProps> = React.memo(({
              )}
           </div>
           )
-        ) : (
-          <>
-            {/* Pending AI Draft Cards */}
+        ) : activeTab === 'drafts' ? (
+            <>
+              {/* Pending AI Draft Cards */}
             <div className="space-y-3">
               <div className="flex items-center justify-between mb-4">
                 <span className="text-xs font-semibold text-slate-700 dark:text-slate-300">Action Drafts</span>
@@ -727,7 +789,50 @@ export const RightInspector: React.FC<RightInspectorProps> = React.memo(({
               )}
             </div>
           </>
-        )}
+        ) : activeTab === 'chat' ? (
+          <div className="flex flex-col h-full bg-white dark:bg-slate-950/70 border border-indigo-200 dark:border-indigo-500/20 rounded-xl overflow-hidden shadow-sm flex-1">
+            <div className="flex-1 overflow-y-auto p-3 space-y-3" ref={chatScrollRef}>
+              {chatMessages.map((msg, idx) => (
+                <div key={idx} className={`flex flex-col ${msg.role === 'user' ? 'items-end' : 'items-start'}`}>
+                  <div className={`text-xs px-3 py-2 rounded-xl max-w-[90%] shadow-sm ${
+                    msg.role === 'user' 
+                      ? 'bg-indigo-600 text-white rounded-br-sm'
+                      : 'bg-slate-100 dark:bg-slate-800 text-slate-800 dark:text-slate-200 rounded-bl-sm border border-slate-200 dark:border-slate-700'
+                  }`}>
+                    {msg.content}
+                  </div>
+                </div>
+              ))}
+              {isChatLoading && (
+                <div className="flex items-start">
+                  <div className="bg-slate-100 dark:bg-slate-800 px-3 py-2 rounded-xl rounded-bl-sm border border-slate-200 dark:border-slate-700 text-xs text-slate-500 italic flex items-center gap-1 shadow-sm">
+                    <span className="animate-pulse inline-block w-1 h-1 bg-slate-400 rounded-full"></span>
+                    <span className="animate-pulse inline-block w-1 h-1 bg-slate-400 rounded-full" style={{ animationDelay: '200ms' }}></span>
+                    <span className="animate-pulse inline-block w-1 h-1 bg-slate-400 rounded-full" style={{ animationDelay: '400ms' }}></span>
+                  </div>
+                </div>
+              )}
+            </div>
+            
+            <form onSubmit={handleSendMessage} className="p-2 border-t border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900 flex gap-2">
+              <input
+                type="text"
+                value={chatInput}
+                onChange={(e) => setChatInput(e.target.value)}
+                placeholder="Ask your AI co-writer..."
+                className="flex-1 bg-white dark:bg-slate-950 text-xs rounded-md border border-slate-200 dark:border-slate-700 px-3 py-2 outline-none focus:border-indigo-500 transition-colors"
+                disabled={isChatLoading}
+              />
+              <button 
+                type="submit"
+                disabled={!chatInput.trim() || isChatLoading}
+                className="bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white p-2 rounded-md transition-colors"
+              >
+                <Zap className="w-3.5 h-3.5" />
+              </button>
+            </form>
+          </div>
+        ) : null}
       </div>
     </aside>
   )

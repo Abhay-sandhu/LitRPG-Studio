@@ -539,6 +539,53 @@ class AmbientAIRequest(BaseModel):
     narrative_text: str
     project_id: int
 
+class ChatMessage(BaseModel):
+    role: str
+    content: str
+
+class ChatRequest(BaseModel):
+    project_id: int
+    messages: list[ChatMessage]
+
+@app.post("/api/ai/chat")
+async def trigger_chat(request: ChatRequest, db: AsyncSession = Depends(get_db)):
+    project = await db.get(models.Project, request.project_id)
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+        
+    # Get all lore and characters for context
+    lore_result = await db.execute(select(models.LoreEntity).where(models.LoreEntity.project_id == request.project_id))
+    lore = lore_result.scalars().all()
+    
+    char_result = await db.execute(select(models.Character).where(models.Character.project_id == request.project_id))
+    characters = char_result.scalars().all()
+
+    import anyio
+    from app.ai import generate_chat_response
+    
+    # We can pass lore and characters as context strings
+    lore_context = "\n".join([f"- {l.name} ({l.category}): {l.description}" for l in lore])
+    char_context = "\n".join([f"- {c.name}: {c.stats}" for c in characters])
+    
+    system_prompt = f"""You are an expert AI co-writer and brainstorming assistant for a LitRPG web novel.
+You must help the author brainstorm ideas, overcome writer's block, and keep track of story details.
+Here is the Story Bible context:
+--- LORE ---
+{lore_context}
+
+--- CHARACTERS ---
+{char_context}
+
+Keep your answers concise, creative, and focused on helping the author write the next scene or solve plot holes."""
+
+    response_text = await anyio.to_thread.run_sync(
+        generate_chat_response,
+        system_prompt,
+        request.messages
+    )
+    
+    return {"status": "ok", "response": response_text}
+
 @app.post("/api/ai/ambient")
 async def trigger_ambient_ai(request: AmbientAIRequest, db: AsyncSession = Depends(get_db)):
     project = await db.get(models.Project, request.project_id)

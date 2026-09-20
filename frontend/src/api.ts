@@ -187,6 +187,11 @@ export const triggerAmbientAI = async (payload: AmbientAIPayload) => {
     return data
 }
 
+export const sendChatMessage = async (projectId: number, messages: {role: string, content: string}[]) => {
+    const { data } = await api.post('/ai/chat', { project_id: projectId, messages })
+    return data
+}
+
 export const updateCharacter = async (characterId: number, payload: any) => {
     const { data } = await api.put(`/characters/${characterId}`, payload)
     return data
