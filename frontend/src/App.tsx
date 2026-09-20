@@ -7,7 +7,7 @@ import { RightInspector } from './components/Inspector/RightInspector'
 import type { DraftItem } from './components/Inspector/RightInspector'
 import { GlobalNav } from './components/Navigation/GlobalNav'
 import type { ViewType } from './components/Navigation/GlobalNav'
-import { SettingsView } from './components/Views/PlaceholderViews'
+import { SettingsView } from './components/Views/SettingsView'
 import { ProjectsView } from './components/Views/ProjectsView'
 import { AnalyticsView } from './components/Views/AnalyticsView'
 import { BibleView } from './components/Views/BibleView'
@@ -26,6 +26,24 @@ export default function App() {
   const [currentView, setCurrentView] = useState<ViewType>('editor')
 
   const [projectId, setProjectId] = useState<number>(1)
+  
+  type ThemeType = 'light' | 'dark' | 'system'
+  const [theme, setTheme] = useState<ThemeType>(() => {
+    return (localStorage.getItem('app_theme') as ThemeType) || 'system'
+  })
+
+  useEffect(() => {
+    const root = window.document.documentElement
+    root.classList.remove('light', 'dark')
+
+    if (theme === 'system') {
+      const systemTheme = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'
+      root.classList.add(systemTheme)
+    } else {
+      root.classList.add(theme)
+    }
+    localStorage.setItem('app_theme', theme)
+  }, [theme])
   
   const { data: chapters = [] } = useQuery({
     queryKey: ['chapters', projectId],
@@ -269,7 +287,7 @@ export default function App() {
       {currentView === 'bible' && <BibleView projectId={projectId} />}
       {currentView === 'constellation' && <ConstellationView projectId={projectId} />}
       {currentView === 'analytics' && <AnalyticsView projectId={projectId} />}
-      {currentView === 'settings' && <SettingsView />}
+      {currentView === 'settings' && <SettingsView currentTheme={theme} onChangeTheme={setTheme} />}
     </div>
   )
 }
