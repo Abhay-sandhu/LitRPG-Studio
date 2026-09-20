@@ -83,22 +83,6 @@ export default function App() {
     }
   }, [activeChapterId, activeChapter?.content])
 
-  const [isDarkMode, setIsDarkMode] = useState(() => {
-    const saved = localStorage.getItem('theme')
-    if (saved) return saved === 'dark'
-    return window.matchMedia ? window.matchMedia('(prefers-color-scheme: dark)').matches : true
-  })
-
-  useEffect(() => {
-    if (isDarkMode) {
-      document.documentElement.classList.add('dark')
-      localStorage.setItem('theme', 'dark')
-    } else {
-      document.documentElement.classList.remove('dark')
-      localStorage.setItem('theme', 'light')
-    }
-  }, [isDarkMode])
-
   const queryClient = useQueryClient()
   const titleTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
@@ -128,7 +112,6 @@ export default function App() {
   // Stable callbacks for memoized child components to prevent re-renders on keystrokes
   const toggleLeftCollapse = useCallback(() => setLeftCollapsed(p => !p), [])
   const toggleRightCollapse = useCallback(() => setRightCollapsed(p => !p), [])
-  const toggleTheme = useCallback(() => setIsDarkMode(p => !p), [])
   const openNav = useCallback(() => setNavOpen(true), [])
   const closeNav = useCallback(() => setNavOpen(false), [])
 
@@ -225,6 +208,19 @@ export default function App() {
     }
   }, [activeChapter, projectId])
 
+  const [zenMode, setZenMode] = useState(false)
+
+  // Keyboard shortcut for exiting Zen Mode
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && zenMode) {
+        setZenMode(false)
+      }
+    }
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [zenMode])
+
   const [saveStatus, setSaveStatus] = useState<'synced' | 'saving' | 'error'>('synced')
 
   return (
@@ -237,50 +233,66 @@ export default function App() {
       />
 
       {/* Top Navbar */}
-      <Navbar
-        wordCount={wordCount}
-        chapterTitle={currentView === 'editor' ? activeChapterTitle : 'Global Dashboard'}
-        onChangeTitle={currentView === 'editor' ? handleTitleChange : undefined}
-        isAnalyzing={isAnalyzing}
-        isDarkMode={isDarkMode}
-        saveStatus={saveStatus}
-        onToggleTheme={toggleTheme}
-        onOpenNav={openNav}
-      />
+      {!zenMode && (
+        <Navbar
+          wordCount={wordCount}
+          chapterTitle={currentView === 'editor' ? activeChapterTitle : 'Global Dashboard'}
+          onChangeTitle={currentView === 'editor' ? handleTitleChange : undefined}
+          isAnalyzing={isAnalyzing}
+          saveStatus={saveStatus}
+          onToggleZenMode={() => setZenMode(true)}
+          onOpenNav={openNav}
+        />
+      )}
 
       {/* Main Workspace Area based on selected View */}
       <div className={`flex-1 flex overflow-hidden ${currentView === 'editor' ? '' : 'hidden'}`}>
         {/* Left Sidebar: Chapters & Local Story Bible */}
-        <LeftSidebar
-          projectId={projectId}
-          collapsed={leftCollapsed}
-          onToggleCollapse={toggleLeftCollapse}
-          chapters={chapters}
-          activeChapterId={activeChapterId ?? undefined}
-          onSelectChapter={setActiveChapterId}
-        />
+        {!zenMode && (
+          <LeftSidebar
+            projectId={projectId}
+            collapsed={leftCollapsed}
+            onToggleCollapse={toggleLeftCollapse}
+            chapters={chapters}
+            activeChapterId={activeChapterId ?? undefined}
+            onSelectChapter={setActiveChapterId}
+          />
+        )}
 
         {/* Center Canvas: TipTap Rich Text Editor */}
-        <TipTapEditor
-          key={activeChapterId ?? 'empty'}
-          chapterId={activeChapterId ?? undefined}
-          projectId={projectId}
-          initialContent={activeChapter?.content || ''}
-          onWordCountChange={setWordCount}
-          onContentChange={handleContentChangeForAI}
-          onSaveStatusChange={setSaveStatus}
-        />
+        <div className="flex-1 relative flex flex-col bg-white dark:bg-slate-900 overflow-hidden">
+          {zenMode && (
+            <button 
+              onClick={() => setZenMode(false)}
+              className="absolute top-4 right-4 z-50 p-2 rounded-lg bg-slate-100/50 dark:bg-slate-800/50 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-500 transition-colors opacity-0 hover:opacity-100 group-hover:opacity-100 focus:opacity-100 backdrop-blur"
+              title="Exit Zen Mode (Esc)"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M8 3v3a2 2 0 0 1-2 2H3"/><path d="M21 8h-3a2 2 0 0 1-2-2V3"/><path d="M3 16h3a2 2 0 0 1 2 2v3"/><path d="M16 21v-3a2 2 0 0 1 2-2h3"/></svg>
+            </button>
+          )}
+          <TipTapEditor
+            key={activeChapterId ?? 'empty'}
+            chapterId={activeChapterId ?? undefined}
+            projectId={projectId}
+            initialContent={activeChapter?.content || ''}
+            onWordCountChange={setWordCount}
+            onContentChange={handleContentChangeForAI}
+            onSaveStatusChange={setSaveStatus}
+          />
+        </div>
 
         {/* Right Inspector: Live Character Sheet & AI Draft Queue */}
-        <RightInspector
-          collapsed={rightCollapsed}
-          onToggleCollapse={toggleRightCollapse}
-          projectId={projectId}
-          drafts={drafts}
-          setDrafts={setDrafts}
-          onScanChapter={handleScanChapter}
-          activeChapterId={activeChapterId ?? undefined}
-        />
+        {!zenMode && (
+          <RightInspector
+            collapsed={rightCollapsed}
+            onToggleCollapse={toggleRightCollapse}
+            projectId={projectId}
+            drafts={drafts}
+            setDrafts={setDrafts}
+            onScanChapter={handleScanChapter}
+            activeChapterId={activeChapterId ?? undefined}
+          />
+        )}
       </div>
 
       {currentView === 'projects' && <ProjectsView activeProjectId={projectId} onSelectProject={setProjectId} />}

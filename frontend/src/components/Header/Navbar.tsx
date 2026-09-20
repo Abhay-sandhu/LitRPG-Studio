@@ -1,18 +1,17 @@
 import React from 'react'
-import { BookOpen, Sparkles, CheckCircle2, Moon, Sun, Menu } from 'lucide-react'
+import { BookOpen, Sparkles, CheckCircle2, Menu, Maximize } from 'lucide-react'
 
 interface NavbarProps {
   wordCount: number
   chapterTitle: string
   isAnalyzing: boolean
-  isDarkMode: boolean
   saveStatus: 'synced' | 'saving' | 'error'
   onChangeTitle?: (newTitle: string) => void
-  onToggleTheme: () => void
+  onToggleZenMode: () => void
   onOpenNav: () => void
 }
 
-export const Navbar: React.FC<NavbarProps> = React.memo(({ wordCount, chapterTitle, isAnalyzing, isDarkMode, saveStatus, onChangeTitle, onToggleTheme, onOpenNav }) => {
+export const Navbar: React.FC<NavbarProps> = React.memo(({ wordCount, chapterTitle, isAnalyzing, saveStatus, onChangeTitle, onToggleZenMode, onOpenNav }) => {
   return (
     <header className="h-14 border-b border-slate-200 dark:border-slate-800 bg-white/90 dark:bg-slate-900/90 backdrop-blur px-4 flex items-center justify-between select-none z-10 transition-colors">
       <div className="flex items-center space-x-3">
@@ -75,11 +74,11 @@ export const Navbar: React.FC<NavbarProps> = React.memo(({ wordCount, chapterTit
         )}
         
         <button 
-          onClick={onToggleTheme}
+          onClick={onToggleZenMode}
           className="p-1.5 rounded-md text-slate-500 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800 transition-colors"
-          title="Toggle light/dark theme"
+          title="Enter Zen Mode (Focus Mode)"
         >
-          {isDarkMode ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
+          <Maximize className="w-4 h-4" />
         </button>
       </div>
     </header>
