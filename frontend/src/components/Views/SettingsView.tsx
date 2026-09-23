@@ -15,10 +15,16 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ currentTheme, onChan
   // Try to load saved settings
   useEffect(() => {
     const savedAmbient = localStorage.getItem('ambient_sensitivity')
-    if (savedAmbient) setAmbientSensitivity(parseInt(savedAmbient))
+    if (savedAmbient) {
+      const parsed = parseInt(savedAmbient, 10)
+      if (!isNaN(parsed) && parsed >= 0 && parsed <= 100) setAmbientSensitivity(parsed)
+    }
     
     const savedTactical = localStorage.getItem('tactical_strictness')
-    if (savedTactical) setTacticalStrictness(parseInt(savedTactical))
+    if (savedTactical) {
+      const parsed = parseInt(savedTactical, 10)
+      if (!isNaN(parsed) && parsed >= 0 && parsed <= 100) setTacticalStrictness(parsed)
+    }
   }, [])
 
   const handleAmbientChange = (e: React.ChangeEvent<HTMLInputElement>) => {

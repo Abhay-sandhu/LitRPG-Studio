@@ -7,7 +7,7 @@ from sqlalchemy.engine import Engine
 DATABASE_URL = "sqlite+aiosqlite:///./litrpg.db"
 ECHO_SQL = os.getenv("SQL_ECHO", "false").lower() in ("true", "1", "yes")
 
-engine = create_async_engine(DATABASE_URL, echo=ECHO_SQL)
+engine = create_async_engine(DATABASE_URL, echo=ECHO_SQL, connect_args={"timeout": 30})
 
 @event.listens_for(Engine, "connect")
 def set_sqlite_pragma(dbapi_connection, connection_record):

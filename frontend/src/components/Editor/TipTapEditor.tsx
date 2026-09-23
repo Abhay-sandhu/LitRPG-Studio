@@ -144,12 +144,21 @@ export const TipTapEditor: React.FC<TipTapEditorProps> = ({
           words: savedData.words
         }).then(() => {
           queryClient.invalidateQueries({ queryKey: ['chapters'] })
+          onSaveStatusChange?.('synced')
         }).catch((err: any) => {
           console.error("Cleanup save failed:", err)
+          onSaveStatusChange?.('error')
         })
       }
     }
-  }, [queryClient])
+  }, [queryClient, onSaveStatusChange])
+
+  // Ensure save status is clean upon chapter mount
+  useEffect(() => {
+    if (chapterId) {
+      onSaveStatusChange?.('synced')
+    }
+  }, [chapterId, onSaveStatusChange])
 
   if (!chapterId) {
     return (

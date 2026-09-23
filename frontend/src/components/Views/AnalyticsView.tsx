@@ -20,16 +20,21 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({ projectId }) => {
 
   const [selectedCharacterId, setSelectedCharacterId] = useState<number | null>(null)
 
-  // Auto-select first character when they load
+  // Auto-select first character when characters load or project switches
   React.useEffect(() => {
-    if (characters.length > 0 && selectedCharacterId === null) {
-      setSelectedCharacterId(characters[0].id)
+    if (characters.length > 0) {
+      const exists = characters.some(c => c.id === selectedCharacterId)
+      if (!exists) {
+        setSelectedCharacterId(characters[0].id)
+      }
+    } else {
+      setSelectedCharacterId(null)
     }
   }, [characters, selectedCharacterId])
 
   const { data: ledgerData = [] } = useQuery({
-    queryKey: ['character-ledger', selectedCharacterId],
-    queryFn: () => fetchCharacterLedger(selectedCharacterId!),
+    queryKey: ['ledger', selectedCharacterId],
+    queryFn: () => (selectedCharacterId ? fetchCharacterLedger(selectedCharacterId) : Promise.resolve([])),
     enabled: selectedCharacterId !== null
   })
 
@@ -43,39 +48,82 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({ projectId }) => {
 
   const totalWords = chapters.reduce((sum: number, c: any) => sum + (c.words || 0), 0)
 
+  const selectedChar = characters.find((c: any) => c.id === selectedCharacterId)
+
+  const getBaseStat = (statName: string): number => {
+    if (!selectedChar?.stats || typeof selectedChar.stats !== 'object') return 0
+    for (const [k, v] of Object.entries(selectedChar.stats)) {
+      if (typeof v === 'number' && k.toLowerCase() === statName.toLowerCase()) return v
+      if (typeof v === 'object' && v !== null && !Array.isArray(v)) {
+        for (const [nestedK, nestedV] of Object.entries(v)) {
+          if (typeof nestedV === 'number' && nestedK.toLowerCase() === statName.toLowerCase()) return nestedV
+        }
+      }
+    }
+    return 0
+  }
+
   // Format Stat Progression Chart Data
   const statProgressionData = useMemo(() => {
     if (!ledgerData || ledgerData.length === 0) return { data: [], lines: [] }
-    
-    // Group ledger entries by time
-    const timeline: Record<string, any> = {}
     
     // Get all unique stat names
     const statNames = new Set<string>()
 
     // Reconstruct the states at each point in time
     const currentState: Record<string, number> = {}
+    const timelineData: Array<Record<string, any>> = []
 
-    // Sort by timestamp
+    // Sort by timestamp asc
     const sorted = [...ledgerData].sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime())
     
     sorted.forEach((entry: any, index: number) => {
-      if (entry.stat_name && typeof entry.new_value === 'number') {
-        statNames.add(entry.stat_name)
-        currentState[entry.stat_name] = entry.new_value
-        
-        timeline[`Entry ${index + 1}`] = {
-          name: `Action ${index + 1}`,
-          ...currentState
+      let anyStatUpdated = false
+      const changes = entry.changes || {}
+
+      for (const [stat, val] of Object.entries(changes)) {
+        let numVal: number | null = null
+        const canonicalStat = Array.from(statNames).find(s => s.toLowerCase() === stat.toLowerCase()) || stat
+
+        if (typeof val === 'number') {
+          numVal = val
+        } else if (typeof val === 'object' && val !== null) {
+          if (typeof (val as any).new === 'number') {
+            numVal = (val as any).new
+          } else if (typeof (val as any).new === 'string' && !isNaN(Number((val as any).new)) && (val as any).new.trim() !== '') {
+            numVal = Number((val as any).new)
+          } else if ((val as any).delta !== undefined && (val as any).delta !== null) {
+            const cleanDelta = String((val as any).delta).replace(/\s+/g, '')
+            const parsedDelta = parseFloat(cleanDelta)
+            if (!isNaN(parsedDelta)) {
+              const currentVal = currentState[canonicalStat] !== undefined ? currentState[canonicalStat] : getBaseStat(canonicalStat)
+              numVal = currentVal + parsedDelta
+            }
+          }
+        } else if (typeof val === 'string' && !isNaN(Number(val)) && val.trim() !== '') {
+          numVal = Number(val)
         }
+
+        if (numVal !== null && !isNaN(numVal)) {
+          statNames.add(canonicalStat)
+          currentState[canonicalStat] = numVal
+          anyStatUpdated = true
+        }
+      }
+
+      if (anyStatUpdated) {
+        timelineData.push({
+          name: entry.event_name ? (entry.event_name.length > 20 ? entry.event_name.substring(0, 18) + '...' : entry.event_name) : `Event ${index + 1}`,
+          ...currentState
+        })
       }
     })
 
     return {
-      data: Object.values(timeline),
+      data: timelineData,
       lines: Array.from(statNames)
     }
-  }, [ledgerData])
+  }, [ledgerData, selectedChar])
 
   const COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#06b6d4', '#ec4899', '#84cc16']
 
@@ -132,12 +180,17 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({ projectId }) => {
             
             <select 
               value={selectedCharacterId || ''} 
+              disabled={characters.length === 0}
               onChange={(e) => setSelectedCharacterId(Number(e.target.value))}
-              className="bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-sm rounded-lg focus:ring-sky-500 focus:border-sky-500 block p-2 text-slate-900 dark:text-slate-200"
+              className="bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-sm rounded-lg focus:ring-sky-500 focus:border-sky-500 block p-2 text-slate-900 dark:text-slate-200 disabled:opacity-50"
             >
-              {characters.map((c) => (
-                <option key={c.id} value={c.id}>{c.name}</option>
-              ))}
+              {characters.length === 0 ? (
+                <option value="">No characters available</option>
+              ) : (
+                characters.map((c) => (
+                  <option key={c.id} value={c.id}>{c.name}</option>
+                ))
+              )}
             </select>
           </div>
 

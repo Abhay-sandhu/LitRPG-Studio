@@ -12,10 +12,11 @@ import {
   Zap,
 } from 'lucide-react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { fetchCharacters, fetchCharacterLedger, acceptActionDraft, createLore, updateCharacter, createLoreRelationshipsBulk, sendChatMessage } from '../../api'
+import { fetchCharacters, fetchCharacterLedger, acceptActionDraft, createLore, updateCharacter, createCharacter, createLoreRelationshipsBulk, sendChatMessage } from '../../api'
 
 export interface DraftItem {
   id: number
+  chapter_id?: number
   type: 'item' | 'stat' | 'lore' | string
   title: string
   desc: string
@@ -65,14 +66,17 @@ export function evaluateFormula(formula: string, stats: Record<string, any>): nu
   if (!formula || typeof formula !== 'string') return null
   try {
     const vars = getAllStatVariables(stats)
-    const tokenized = formula.replace(/[A-Za-z_][A-Za-z0-9_]*/g, (match) => {
-      if (match in vars) return String(vars[match])
-      const lower = match.toLowerCase()
-      if (lower in vars) return String(vars[lower])
-      return match
-    })
+    
+    // Sort keys by descending length so multi-word or longer keys match before substrings
+    const sortedKeys = Object.keys(vars).sort((a, b) => b.length - a.length)
+    let tokenized = formula
+    for (const key of sortedKeys) {
+      const escaped = key.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+      const regex = new RegExp(`\\b${escaped}\\b`, 'gi')
+      tokenized = tokenized.replace(regex, String(vars[key]))
+    }
 
-    if (!/^[0-9+\-*/().\s]+$/.test(tokenized)) {
+    if (!/^[0-9+\-*/().\s%]+$/.test(tokenized)) {
       return null
     }
 
@@ -108,6 +112,20 @@ export const RightInspector: React.FC<RightInspectorProps> = React.memo(({
   const [chatInput, setChatInput] = useState('')
   const [isChatLoading, setIsChatLoading] = useState(false)
   const chatScrollRef = useRef<HTMLDivElement>(null)
+
+  // Character Initialization Form State
+  const [newCharacterName, setNewCharacterName] = useState('')
+  const [isCreatingChar, setIsCreatingChar] = useState(false)
+
+  // Reset chat and project-specific inspector state when projectId changes
+  React.useEffect(() => {
+    setChatMessages([
+      { role: 'model', content: 'Hello! I am your AI Co-writer. How can I help you brainstorm today?' }
+    ])
+    setChatInput('')
+    setNewCharacterName('')
+    setIsEditingFormulas(false)
+  }, [projectId])
 
   // Fetch Characters
   const { data: characters = [], isLoading: isCharsLoading } = useQuery({
@@ -168,7 +186,8 @@ export const RightInspector: React.FC<RightInspectorProps> = React.memo(({
     const draft = drafts.find((d) => d.id === id)
     if (!draft) return
 
-    if (draft.changes && typeof draft.changes === 'object' && Object.keys(draft.changes).length > 0 && !activeChapterId) {
+    const targetChapterId = draft.chapter_id || activeChapterId
+    if (draft.changes && typeof draft.changes === 'object' && Object.keys(draft.changes).length > 0 && !targetChapterId) {
         alert("Cannot accept draft: No active chapter found. Please ensure you are viewing a chapter.")
         return
     }
@@ -193,31 +212,61 @@ export const RightInspector: React.FC<RightInspectorProps> = React.memo(({
 
       // 2. Process Character Stat/Item changes if present
       if (draft.changes && typeof draft.changes === 'object' && Object.keys(draft.changes).length > 0) {
-        if (!protagonist) {
-          alert("Cannot apply stat changes because no protagonist character exists.")
-          processedDrafts.current.delete(id)
-          return
+        let currentChar = protagonist
+        if (!currentChar) {
+          try {
+            currentChar = await createCharacter({
+              project_id: projectId,
+              name: "Protagonist",
+              is_protagonist: true,
+              stats: { Attributes: {}, Inventory: [], Skills: [] },
+              formulas: {}
+            })
+            queryClient.invalidateQueries({ queryKey: ['characters'] })
+          } catch (e) {
+            console.error("Failed to auto-create protagonist:", e)
+            alert("Cannot apply stat changes because no protagonist character exists and auto-creation failed.")
+            processedDrafts.current.delete(id)
+            return
+          }
         }
-        const updatedStats = { ...protagonist.stats }
-        let updatedFormulas = { ...(protagonist.formulas || {}) }
+        const updatedStats = { ...(currentChar.stats || {}) }
+        let updatedFormulas = { ...(currentChar.formulas || {}) }
         let formulasChanged = false
         
         Object.entries(draft.changes).forEach(([statKey, changeVal]: [string, any]) => {
+          if (!changeVal || typeof changeVal !== 'object') return
+
           // A. Handle numeric / scalar stat changes
-          let targetVal = changeVal.new
-          if (targetVal === undefined && changeVal.delta !== undefined) {
+          let targetVal = (changeVal.new !== undefined && changeVal.new !== null) ? changeVal.new : undefined
+          if (targetVal === undefined && changeVal.delta !== undefined && changeVal.delta !== null) {
             let existingVal: any = undefined
+
+            // Search for existing stat, case-insensitively
             for (const [, attributes] of Object.entries(updatedStats)) {
-              if (typeof attributes === 'object' && attributes !== null && !Array.isArray(attributes) && statKey in attributes) {
-                existingVal = (attributes as any)[statKey]
-                break
+              if (typeof attributes === 'object' && attributes !== null && !Array.isArray(attributes)) {
+                for (const attrKey of Object.keys(attributes)) {
+                  if (attrKey.toLowerCase() === statKey.toLowerCase()) {
+                    existingVal = (attributes as any)[attrKey]
+                    break
+                  }
+                }
+                if (existingVal !== undefined) break
               }
             }
-            if (existingVal === undefined && updatedStats[statKey] !== undefined) {
-              existingVal = updatedStats[statKey]
+
+            if (existingVal === undefined) {
+              for (const rootKey of Object.keys(updatedStats)) {
+                if (rootKey.toLowerCase() === statKey.toLowerCase()) {
+                  existingVal = updatedStats[rootKey]
+                  break
+                }
+              }
             }
+
             const numCurrent = typeof existingVal === 'number' ? existingVal : parseFloat(existingVal)
-            const numDelta = typeof changeVal.delta === 'number' ? changeVal.delta : parseFloat(changeVal.delta)
+            const cleanDelta = String(changeVal.delta).replace(/\s+/g, '')
+            const numDelta = typeof changeVal.delta === 'number' ? changeVal.delta : parseFloat(cleanDelta)
             if (!isNaN(numCurrent) && !isNaN(numDelta)) {
               targetVal = numCurrent + numDelta
             } else if (!isNaN(numDelta)) {
@@ -225,81 +274,90 @@ export const RightInspector: React.FC<RightInspectorProps> = React.memo(({
             }
           }
 
-          if (targetVal !== undefined) {
+          if (targetVal !== undefined && targetVal !== null && !isNaN(targetVal)) {
             let nestedFound = false
             for (const [category, attributes] of Object.entries(updatedStats)) {
-              if (typeof attributes === 'object' && attributes !== null && !Array.isArray(attributes) && statKey in attributes) {
-                // Prevent hallucination from overwriting an array with a scalar
-                if (!Array.isArray((attributes as any)[statKey])) {
-                    updatedStats[category] = { ...attributes, [statKey]: targetVal }
-                } else {
-                    console.warn(`Type safety: Refused to overwrite array ${statKey} with scalar ${targetVal}`)
+              if (typeof attributes === 'object' && attributes !== null && !Array.isArray(attributes)) {
+                const existingKey = Object.keys(attributes).find(k => k.toLowerCase() === statKey.toLowerCase())
+                if (existingKey) {
+                  // Prevent hallucination from overwriting an array with a scalar
+                  if (!Array.isArray((attributes as any)[existingKey])) {
+                    updatedStats[category] = { ...attributes, [existingKey]: targetVal }
+                  } else {
+                    console.warn(`Type safety: Refused to overwrite array ${existingKey} with scalar ${targetVal}`)
+                  }
+                  nestedFound = true
+                  break
                 }
-                nestedFound = true
-                break
               }
             }
             if (!nestedFound) {
-              // Prevent hallucination from overwriting a root array with a scalar
-              if (updatedStats[statKey] !== undefined && Array.isArray(updatedStats[statKey])) {
-                  console.warn(`Type safety: Refused to overwrite root array ${statKey} with scalar ${targetVal}`)
+              const existingRootKey = Object.keys(updatedStats).find(k => k.toLowerCase() === statKey.toLowerCase())
+              const keyToUse = existingRootKey || statKey
+              // If Attributes or Stats object exists, nest scalar stat under it for clean card organization
+              if (typeof updatedStats.Attributes === 'object' && updatedStats.Attributes !== null && !Array.isArray(updatedStats.Attributes)) {
+                updatedStats.Attributes = { ...updatedStats.Attributes, [keyToUse]: targetVal }
+              } else if (typeof updatedStats.Stats === 'object' && updatedStats.Stats !== null && !Array.isArray(updatedStats.Stats)) {
+                updatedStats.Stats = { ...updatedStats.Stats, [keyToUse]: targetVal }
+              } else if (updatedStats[keyToUse] !== undefined && Array.isArray(updatedStats[keyToUse])) {
+                console.warn(`Type safety: Refused to overwrite root array ${keyToUse} with scalar ${targetVal}`)
               } else {
-                  updatedStats[statKey] = targetVal
+                updatedStats[keyToUse] = targetVal
               }
             }
           }
           
           // B. Handle list additions (Skills, Inventory, Titles, etc.)
-          if (changeVal.append !== undefined) {
-            let appended = false
-            
-            // Check root first
-            if (updatedStats[statKey] !== undefined) {
-                if (Array.isArray(updatedStats[statKey])) {
-                    if (!updatedStats[statKey].includes(changeVal.append)) {
-                        updatedStats[statKey] = [...updatedStats[statKey], changeVal.append]
-                    }
-                    appended = true
-                } else {
-                    console.warn(`Type safety: Refused to append to non-array root scalar ${statKey}`)
-                    appended = true // Mark as handled to prevent fallback overwrite
+          if (changeVal.append !== undefined && changeVal.append !== null) {
+            const cleanAppend = typeof changeVal.append === 'string' ? changeVal.append.trim() : String(changeVal.append).trim()
+            if (cleanAppend) {
+              let appended = false
+              
+              // Check root first
+              const rootKey = Object.keys(updatedStats).find(k => k.toLowerCase() === statKey.toLowerCase())
+              if (rootKey && Array.isArray(updatedStats[rootKey])) {
+                if (!updatedStats[rootKey].some((item: any) => String(item).toLowerCase() === cleanAppend.toLowerCase())) {
+                  updatedStats[rootKey] = [...updatedStats[rootKey], cleanAppend]
                 }
-            }
-            
-            // If not found at root, check nested categories
-            if (!appended) {
-              for (const [category, attributes] of Object.entries(updatedStats)) {
-                if (typeof attributes === 'object' && attributes !== null && statKey in attributes) {
-                  if (Array.isArray((attributes as any)[statKey])) {
-                      const existing = (attributes as any)[statKey]
-                      if (!existing.includes(changeVal.append)) {
-                          updatedStats[category] = {
-                            ...attributes,
-                            [statKey]: [...existing, changeVal.append]
-                          }
+                appended = true
+              }
+              
+              // If not found at root, check nested categories
+              if (!appended) {
+                for (const [category, attributes] of Object.entries(updatedStats)) {
+                  if (typeof attributes === 'object' && attributes !== null) {
+                    const nestedKey = Object.keys(attributes).find(k => k.toLowerCase() === statKey.toLowerCase())
+                    if (nestedKey && Array.isArray((attributes as any)[nestedKey])) {
+                      const existing = (attributes as any)[nestedKey]
+                      if (!existing.some((item: any) => String(item).toLowerCase() === cleanAppend.toLowerCase())) {
+                        updatedStats[category] = {
+                          ...attributes,
+                          [nestedKey]: [...existing, cleanAppend]
+                        }
                       }
-                  } else {
-                      console.warn(`Type safety: Refused to append to non-array nested scalar ${statKey}`)
+                      appended = true
+                      break
+                    }
                   }
-                  appended = true
-                  break
                 }
               }
-            }
-            
-            // If completely new, safely initialize it as an array
-            if (!appended) {
-              updatedStats[statKey] = [changeVal.append]
+              
+              // If completely new, safely initialize it as an array
+              if (!appended) {
+                const keyToUse = rootKey || statKey
+                updatedStats[keyToUse] = [cleanAppend]
+              }
             }
           }
           
           // C. Handle relative stat buffs / delta overrides on formulas
-          if (changeVal.delta !== undefined) {
+          if (changeVal.delta !== undefined && currentChar?.formulas) {
              const deltaStr = String(changeVal.delta)
-             if (protagonist.formulas && protagonist.formulas[statKey]) {
+             const formulaKey = Object.keys(updatedFormulas).find(k => k.toLowerCase() === statKey.toLowerCase())
+             if (formulaKey && updatedFormulas[formulaKey]) {
                 const numMatch = deltaStr.trim().match(/^([+-]\s*\d+(?:\.\d+)?)/)
                 if (numMatch) {
-                    updatedFormulas[statKey] = `(${updatedFormulas[statKey]}) ${numMatch[1]}`
+                    updatedFormulas[formulaKey] = `(${updatedFormulas[formulaKey]}) ${numMatch[1]}`
                     formulasChanged = true
                 }
              }
@@ -307,8 +365,8 @@ export const RightInspector: React.FC<RightInspectorProps> = React.memo(({
         })
 
         const ledgerEntry = {
-          character_id: protagonist.id,
-          chapter_id: activeChapterId!,
+          character_id: currentChar.id,
+          chapter_id: targetChapterId!,
           event_name: draft.title,
           changes: draft.changes || {},
           source_type: "AI Draft"
@@ -319,10 +377,11 @@ export const RightInspector: React.FC<RightInspectorProps> = React.memo(({
             payload.formulas = updatedFormulas
         }
 
-        await acceptActionDraft(protagonist.id, payload, ledgerEntry)
+        await acceptActionDraft(currentChar.id, payload, ledgerEntry)
         
         queryClient.invalidateQueries({ queryKey: ['characters'] })
-        queryClient.invalidateQueries({ queryKey: ['ledger', protagonist.id] })
+        queryClient.invalidateQueries({ queryKey: ['characters', projectId] })
+        queryClient.invalidateQueries({ queryKey: ['ledger', currentChar.id] })
         acceptedSomething = true
       }
 
@@ -479,12 +538,66 @@ export const RightInspector: React.FC<RightInspectorProps> = React.memo(({
         </div>
       </div>
 
-      <div className="flex-1 overflow-y-auto p-4 space-y-4">
+      <div className={`flex-1 ${activeTab === 'chat' ? 'flex flex-col p-3 overflow-hidden h-full' : 'overflow-y-auto p-4 space-y-4'}`}>
         {isCharsLoading ? (
             <div className="text-center py-8 text-slate-400"><Activity className="w-6 h-6 mx-auto animate-pulse" /></div>
         ) : activeTab === 'sheet' ? (
           !protagonist ? (
-            <div className="text-center py-8 text-slate-400 text-xs">No character data available.</div>
+            <div className="bg-white dark:bg-slate-950/70 border border-slate-200 dark:border-slate-800/90 rounded-xl p-4 text-center space-y-3 shadow-sm transition-colors">
+              <div className="w-10 h-10 rounded-full bg-sky-50 dark:bg-sky-500/20 text-sky-600 dark:text-sky-400 flex items-center justify-center mx-auto">
+                <User className="w-5 h-5" />
+              </div>
+              <div>
+                <h3 className="text-sm font-semibold text-slate-800 dark:text-slate-200">No Character Initialized</h3>
+                <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
+                  Create a protagonist character to track RPG stats, status screens, and growth ledgers for this project.
+                </p>
+              </div>
+              <form
+                onSubmit={async (e) => {
+                  e.preventDefault()
+                  const nameToUse = newCharacterName.trim() || 'Protagonist'
+                  setIsCreatingChar(true)
+                  try {
+                    await createCharacter({
+                      project_id: projectId,
+                      name: nameToUse,
+                      is_protagonist: true,
+                      stats: {
+                        Attributes: { Strength: 10, Agility: 10, Vitality: 10, Intelligence: 10 },
+                        Inventory: [],
+                        Skills: []
+                      },
+                      formulas: { "Max HP": "Vitality * 10", "Max MP": "Intelligence * 10" }
+                    })
+                    setNewCharacterName('')
+                    queryClient.invalidateQueries({ queryKey: ['characters'] })
+                    queryClient.invalidateQueries({ queryKey: ['characters', projectId] })
+                  } catch (err: any) {
+                    alert(`Failed to create character: ${err?.message || err}`)
+                  } finally {
+                    setIsCreatingChar(false)
+                  }
+                }}
+                className="space-y-2 pt-1"
+              >
+                <input
+                  type="text"
+                  placeholder="Character Name (e.g. Roland)"
+                  value={newCharacterName}
+                  onChange={(e) => setNewCharacterName(e.target.value)}
+                  className="w-full text-xs px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900 text-slate-900 dark:text-slate-100 focus:outline-none focus:border-sky-500"
+                />
+                <button
+                  type="submit"
+                  disabled={isCreatingChar}
+                  className="w-full text-xs py-1.5 px-3 bg-sky-600 hover:bg-sky-500 text-white rounded-lg font-medium shadow-sm transition-colors flex items-center justify-center gap-1.5 disabled:opacity-50"
+                >
+                  <Sparkles className="w-3.5 h-3.5" />
+                  {isCreatingChar ? 'Creating...' : 'Initialize Protagonist'}
+                </button>
+              </form>
+            </div>
           ) : (
           <>
             {/* Identity Card */}
@@ -569,6 +682,7 @@ export const RightInspector: React.FC<RightInspectorProps> = React.memo(({
                                         
                                         await updateCharacter(protagonist.id, { formulas: finalFormulas })
                                         queryClient.invalidateQueries({ queryKey: ['characters'] })
+                                        queryClient.invalidateQueries({ queryKey: ['characters', projectId] })
                                         setIsEditingFormulas(false)
                                     } catch (err) {
                                         console.error("Failed to save formulas:", err)
@@ -674,8 +788,10 @@ export const RightInspector: React.FC<RightInspectorProps> = React.memo(({
                                     <div key={key} className="text-[10px] text-slate-500 font-mono bg-slate-50 dark:bg-slate-900/50 p-2 rounded border border-slate-200 dark:border-slate-800/50 flex justify-between items-center">
                                         <span className="font-semibold text-slate-700 dark:text-slate-300">{key}</span>
                                         <div className="flex items-center gap-1.5">
-                                            {computed !== null && (
+                                            {computed !== null ? (
                                                 <span className="text-emerald-600 dark:text-emerald-400 font-bold">{computed}</span>
+                                            ) : (
+                                                <span className="text-slate-400 dark:text-slate-500 italic text-[9px]">—</span>
                                             )}
                                             <span className="text-slate-400 dark:text-slate-500">(= {formula})</span>
                                         </div>
@@ -708,7 +824,7 @@ export const RightInspector: React.FC<RightInspectorProps> = React.memo(({
                       <div key={entry.id} className="relative pl-4">
                           <div className="absolute -left-[5px] top-1.5 w-2 h-2 rounded-full bg-emerald-500 ring-4 ring-slate-50 dark:ring-slate-900" />
                           <div className="text-[10px] text-slate-400 font-mono mb-0.5">
-                              {new Date(entry.timestamp).toLocaleDateString()}
+                              {new Date(entry.timestamp).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' })}
                           </div>
                           <div className="bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 p-2.5 rounded-lg shadow-sm">
                               <div className="text-xs font-bold text-slate-800 dark:text-slate-200 mb-1">{entry.event_name}</div>
@@ -735,15 +851,29 @@ export const RightInspector: React.FC<RightInspectorProps> = React.memo(({
               {/* Pending AI Draft Cards */}
             <div className="space-y-3">
               <div className="flex items-center justify-between mb-4">
-                <span className="text-xs font-semibold text-slate-700 dark:text-slate-300">Action Drafts</span>
-                <button
-                  type="button"
-                  onClick={onScanChapter}
-                  className="flex items-center gap-1.5 px-2.5 py-1.5 bg-indigo-50 dark:bg-indigo-500/20 text-indigo-700 dark:text-indigo-400 border border-indigo-200 dark:border-indigo-500/30 rounded-md hover:bg-indigo-100 dark:hover:bg-indigo-500/30 transition-colors text-xs font-medium"
-                >
-                  <Sparkles className="w-3.5 h-3.5" />
-                  Scan Chapter
-                </button>
+                <span className="text-xs font-semibold text-slate-700 dark:text-slate-300">
+                  Action Drafts {drafts.length > 0 && `(${drafts.length})`}
+                </span>
+                <div className="flex items-center gap-1.5">
+                  {drafts.length > 1 && (
+                    <button
+                      type="button"
+                      onClick={() => setDrafts([])}
+                      className="px-2 py-1 text-[11px] text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 transition-colors"
+                      title="Dismiss all drafts"
+                    >
+                      Clear All
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    onClick={onScanChapter}
+                    className="flex items-center gap-1.5 px-2.5 py-1.5 bg-indigo-50 dark:bg-indigo-500/20 text-indigo-700 dark:text-indigo-400 border border-indigo-200 dark:border-indigo-500/30 rounded-md hover:bg-indigo-100 dark:hover:bg-indigo-500/30 transition-colors text-xs font-medium"
+                  >
+                    <Sparkles className="w-3.5 h-3.5" />
+                    Scan Chapter
+                  </button>
+                </div>
               </div>
 
               {drafts.length === 0 ? (

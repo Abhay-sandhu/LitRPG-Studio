@@ -41,10 +41,11 @@ app.add_middleware(
 )
 
 from sqlalchemy.orm import noload
+from sqlalchemy.orm.attributes import flag_modified
 
 @app.get("/api/projects", response_model=list[schemas.ProjectListItem])
 async def get_projects(db: AsyncSession = Depends(get_db)):
-    result = await db.execute(select(models.Project).options(noload('*')))
+    result = await db.execute(select(models.Project).options(noload('*')).order_by(models.Project.id))
     return result.scalars().all()
 
 @app.get("/api/projects/{project_id}", response_model=schemas.Project)
@@ -70,8 +71,12 @@ async def delete_project(project_id: int, db: AsyncSession = Depends(get_db)):
     project = await db.get(models.Project, project_id)
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
-    await db.delete(project)
-    await db.commit()
+    try:
+        await db.delete(project)
+        await db.commit()
+    except Exception as e:
+        await db.rollback()
+        raise HTTPException(status_code=400, detail="Cannot delete project because it is in use")
     return {"status": "ok"}
 
 @app.get("/api/chapters", response_model=list[schemas.Chapter])
@@ -93,7 +98,14 @@ async def get_chapter(chapter_id: int, db: AsyncSession = Depends(get_db)):
 
 @app.post("/api/chapters", response_model=schemas.Chapter)
 async def create_chapter(chapter: schemas.ChapterCreate, db: AsyncSession = Depends(get_db)):
-    db_chapter = models.Chapter(**chapter.model_dump())
+    trimmed_title = chapter.title.strip()
+    if not trimmed_title:
+        raise HTTPException(status_code=400, detail="Chapter title cannot be empty")
+    chapter_dict = chapter.model_dump()
+    chapter_dict['title'] = trimmed_title
+    if chapter_dict.get('words') is not None and chapter_dict['words'] < 0:
+        chapter_dict['words'] = 0
+    db_chapter = models.Chapter(**chapter_dict)
     db.add(db_chapter)
     try:
         await db.commit()
@@ -111,6 +123,15 @@ async def update_chapter(chapter_id: int, chapter_update: schemas.ChapterUpdate,
         raise HTTPException(status_code=404, detail="Chapter not found")
     
     update_data = chapter_update.model_dump(exclude_unset=True)
+    if 'title' in update_data:
+        trimmed_title = (update_data['title'] or '').strip()
+        if not trimmed_title:
+            raise HTTPException(status_code=400, detail="Chapter title cannot be empty")
+        update_data['title'] = trimmed_title
+
+    if 'words' in update_data and update_data['words'] is not None and update_data['words'] < 0:
+        update_data['words'] = 0
+
     for key, value in update_data.items():
         setattr(db_chapter, key, value)
         
@@ -124,8 +145,12 @@ async def delete_chapter(chapter_id: int, db: AsyncSession = Depends(get_db)):
     db_chapter = result.scalars().first()
     if not db_chapter:
         raise HTTPException(status_code=404, detail="Chapter not found")
-    await db.delete(db_chapter)
-    await db.commit()
+    try:
+        await db.delete(db_chapter)
+        await db.commit()
+    except Exception as e:
+        await db.rollback()
+        raise HTTPException(status_code=400, detail="Cannot delete chapter because it is in use")
     return {"status": "ok"}
 
 @app.get("/api/lore", response_model=list[schemas.LoreEntity])
@@ -191,6 +216,12 @@ async def update_lore(lore_id: int, lore_update: schemas.LoreEntityUpdate, db: A
         raise HTTPException(status_code=404, detail="Lore entity not found")
     
     update_data = lore_update.model_dump(exclude_unset=True)
+    if 'name' in update_data:
+        trimmed_name = (update_data['name'] or '').strip()
+        if not trimmed_name:
+            raise HTTPException(status_code=400, detail="Lore entity name cannot be empty")
+        update_data['name'] = trimmed_name
+
     for key, value in update_data.items():
         setattr(db_lore, key, value)
         
@@ -204,8 +235,12 @@ async def delete_lore(lore_id: int, db: AsyncSession = Depends(get_db)):
     db_lore = result.scalars().first()
     if not db_lore:
         raise HTTPException(status_code=404, detail="Lore entity not found")
-    await db.delete(db_lore)
-    await db.commit()
+    try:
+        await db.delete(db_lore)
+        await db.commit()
+    except Exception as e:
+        await db.rollback()
+        raise HTTPException(status_code=400, detail="Cannot delete lore because it is in use")
     return {"status": "ok"}
 
 # --- Lore Relationships ---
@@ -230,6 +265,9 @@ async def create_lore_relationship(rel: schemas.LoreRelationshipCreate, db: Asyn
         raise HTTPException(status_code=404, detail="Project not found")
     if rel.source_id == rel.target_id:
         raise HTTPException(status_code=400, detail="Source and target entity cannot be the same")
+    trimmed_rel_type = rel.relationship_type.strip()
+    if not trimmed_rel_type:
+        raise HTTPException(status_code=400, detail="Relationship type cannot be empty")
     source = await db.get(models.LoreEntity, rel.source_id)
     target = await db.get(models.LoreEntity, rel.target_id)
     if not source or not target or source.project_id != rel.project_id or target.project_id != rel.project_id:
@@ -364,6 +402,10 @@ async def create_character(character: schemas.CharacterCreate, db: AsyncSession 
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
 
+    trimmed_name = character.name.strip()
+    if not trimmed_name:
+        raise HTTPException(status_code=400, detail="Character name cannot be empty")
+
     if character.lore_entity_id:
         lore = await db.get(models.LoreEntity, character.lore_entity_id)
         if not lore or lore.project_id != character.project_id:
@@ -376,7 +418,9 @@ async def create_character(character: schemas.CharacterCreate, db: AsyncSession 
             .values(is_protagonist=False)
         )
 
-    db_character = models.Character(**character.model_dump())
+    char_data = character.model_dump()
+    char_data['name'] = trimmed_name
+    db_character = models.Character(**char_data)
     db.add(db_character)
     try:
         await db.commit()
@@ -394,6 +438,12 @@ async def update_character(character_id: int, character_update: schemas.Characte
         raise HTTPException(status_code=404, detail="Character not found")
     
     update_data = character_update.model_dump(exclude_unset=True)
+    if 'name' in update_data:
+        trimmed_name = (update_data['name'] or '').strip()
+        if not trimmed_name:
+            raise HTTPException(status_code=400, detail="Character name cannot be empty")
+        update_data['name'] = trimmed_name
+
     if 'lore_entity_id' in update_data and update_data['lore_entity_id'] is not None:
         lore = await db.get(models.LoreEntity, update_data['lore_entity_id'])
         if not lore or lore.project_id != db_character.project_id:
@@ -408,6 +458,8 @@ async def update_character(character_id: int, character_update: schemas.Characte
 
     for key, value in update_data.items():
         setattr(db_character, key, value)
+        if key in ("stats", "formulas"):
+            flag_modified(db_character, key)
         
     try:
         await db.commit()
@@ -423,8 +475,12 @@ async def delete_character(character_id: int, db: AsyncSession = Depends(get_db)
     db_character = result.scalars().first()
     if not db_character:
         raise HTTPException(status_code=404, detail="Character not found")
-    await db.delete(db_character)
-    await db.commit()
+    try:
+        await db.delete(db_character)
+        await db.commit()
+    except Exception as e:
+        await db.rollback()
+        raise HTTPException(status_code=400, detail="Cannot delete character because it is in use")
     return {"status": "ok"}
 
 # --- Ledgers ---
@@ -471,8 +527,10 @@ async def accept_action_draft(character_id: int, payload: schemas.AcceptDraftReq
                 raise HTTPException(status_code=404, detail="Chapter not found in character project")
 
             db_character.stats = payload.character_stats
+            flag_modified(db_character, "stats")
             if payload.character_formulas is not None:
                 db_character.formulas = payload.character_formulas
+                flag_modified(db_character, "formulas")
             
             # Insert Ledger
             db_ledger = models.Ledger(character_id=character_id, **payload.ledger.model_dump())
@@ -502,6 +560,9 @@ async def trigger_tactical_ai(request: TacticalAIRequest, db: AsyncSession = Dep
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
 
+    if not request.system_box_text or not request.system_box_text.strip():
+        return {"status": "ok", "drafts": []}
+
     db_char = None
     if request.character_id:
         result = await db.execute(select(models.Character).where(
@@ -509,6 +570,8 @@ async def trigger_tactical_ai(request: TacticalAIRequest, db: AsyncSession = Dep
             models.Character.project_id == request.project_id
         ))
         db_char = result.scalars().first()
+        if not db_char:
+            raise HTTPException(status_code=404, detail="Character not found")
     else:
         # Primary Fallback: Protagonist
         result = await db.execute(select(models.Character).where(
@@ -523,15 +586,14 @@ async def trigger_tactical_ai(request: TacticalAIRequest, db: AsyncSession = Dep
                 models.Character.project_id == request.project_id
             ))
             db_char = result.scalars().first()
-            
-    if not db_char:
-        raise HTTPException(status_code=404, detail="Character not found")
+
+    char_stats = (db_char.stats or {}) if db_char else {}
         
     drafts = await anyio.to_thread.run_sync(
         extract_tactical_drafts,
         request.system_box_text,
         request.surrounding_text,
-        db_char.stats or {}
+        char_stats
     )
     return {"status": "ok", "drafts": drafts}
 
@@ -552,6 +614,9 @@ async def trigger_chat(request: ChatRequest, db: AsyncSession = Depends(get_db))
     project = await db.get(models.Project, request.project_id)
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
+
+    if not request.messages:
+        raise HTTPException(status_code=400, detail="Messages list cannot be empty")
         
     # Get all lore and characters for context
     lore_result = await db.execute(select(models.LoreEntity).where(models.LoreEntity.project_id == request.project_id))
@@ -591,6 +656,9 @@ async def trigger_ambient_ai(request: AmbientAIRequest, db: AsyncSession = Depen
     project = await db.get(models.Project, request.project_id)
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
+
+    if not request.narrative_text or not request.narrative_text.strip():
+        return {"status": "ok", "drafts": []}
 
     result = await db.execute(select(models.LoreEntity).where(models.LoreEntity.project_id == request.project_id))
     lore_entities = result.scalars().all()

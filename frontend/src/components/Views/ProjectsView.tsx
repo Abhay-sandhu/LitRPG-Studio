@@ -6,9 +6,10 @@ import { fetchProjects, createProject, deleteProject } from '../../api'
 interface ProjectsViewProps {
   activeProjectId: number | null
   onSelectProject: (id: number) => void
+  onOpenProject?: (id: number) => void
 }
 
-export const ProjectsView: React.FC<ProjectsViewProps> = ({ activeProjectId, onSelectProject }) => {
+export const ProjectsView: React.FC<ProjectsViewProps> = ({ activeProjectId, onSelectProject, onOpenProject }) => {
   const queryClient = useQueryClient()
   const [newProjectTitle, setNewProjectTitle] = useState('')
 
@@ -19,9 +20,12 @@ export const ProjectsView: React.FC<ProjectsViewProps> = ({ activeProjectId, onS
 
   const createMutation = useMutation({
     mutationFn: (title: string) => createProject(title),
-    onSuccess: () => {
+    onSuccess: (newProj: any) => {
       queryClient.invalidateQueries({ queryKey: ['projects'] })
       setNewProjectTitle('')
+      if (newProj?.id) {
+        onSelectProject(newProj.id)
+      }
     }
   })
 
@@ -90,7 +94,7 @@ export const ProjectsView: React.FC<ProjectsViewProps> = ({ activeProjectId, onS
                     ? 'border-sky-500 shadow-md shadow-sky-500/10' 
                     : 'border-slate-200 dark:border-slate-800 hover:border-slate-300 dark:hover:border-slate-700 shadow-sm hover:shadow-md'
                 }`}
-                onClick={() => onSelectProject(project.id)}
+                onClick={() => onOpenProject ? onOpenProject(project.id) : onSelectProject(project.id)}
               >
                 <div className="flex items-start justify-between mb-4">
                   <div className={`p-2 rounded-lg ${isActive ? 'bg-sky-100 text-sky-600 dark:bg-sky-500/20 dark:text-sky-400' : 'bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400'}`}>
@@ -105,6 +109,10 @@ export const ProjectsView: React.FC<ProjectsViewProps> = ({ activeProjectId, onS
                 <p className="text-sm text-slate-500 dark:text-slate-400 line-clamp-2">
                   {project.description || 'No description provided.'}
                 </p>
+
+                <div className="mt-4 pt-3 border-t border-slate-100 dark:border-slate-800/60 flex items-center text-xs font-medium text-sky-600 dark:text-sky-400">
+                  <span>Open in Editor &rarr;</span>
+                </div>
 
                 <button
                   onClick={(e) => {

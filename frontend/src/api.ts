@@ -57,6 +57,15 @@ export interface Character {
     formulas: Record<string, any>
 }
 
+export interface CharacterCreatePayload {
+    project_id: number
+    name: string
+    is_protagonist?: boolean
+    stats?: Record<string, any>
+    formulas?: Record<string, any>
+    lore_entity_id?: number | null
+}
+
 export interface LedgerEntry {
     id: number
     character_id: number
@@ -169,6 +178,11 @@ export const deleteLoreRelationship = async (relId: number): Promise<void> => {
 
 export const fetchCharacters = async (projectId: number): Promise<Character[]> => {
     const { data } = await api.get<Character[]>('/characters?project_id=' + projectId)
+    return data
+}
+
+export const createCharacter = async (payload: CharacterCreatePayload): Promise<Character> => {
+    const { data } = await api.post<Character>('/characters', payload)
     return data
 }
 

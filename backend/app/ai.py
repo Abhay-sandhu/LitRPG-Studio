@@ -71,15 +71,23 @@ def map_drafts_for_frontend(drafts: List[ActionDraftModel], relationships: Optio
     # Let's attach relationships to the FIRST draft, or make a mock draft for them.
     # Actually, returning them as a separate list is better, but since it breaks signature, let's just make a mock draft.
     if relationships:
-        rel_draft = {
-            "id": int(time.time() * 1000),
-            "type": "relationships",
-            "title": "New Lore Relationships",
-            "desc": f"Discovered {len(relationships)} new relationships in the text.",
-            "context": "GraphRAG Update",
-            "relationships": [{"source": r.source_entity_name, "target": r.target_entity_name, "type": r.relationship_type} for r in relationships]
-        }
-        result.append(rel_draft)
+        clean_rels = [
+            {"source": r.source_entity_name.strip(), "target": r.target_entity_name.strip(), "type": r.relationship_type.strip()}
+            for r in relationships
+            if getattr(r, 'source_entity_name', None) and getattr(r, 'target_entity_name', None) and getattr(r, 'relationship_type', None)
+            and r.source_entity_name.strip() and r.target_entity_name.strip() and r.relationship_type.strip()
+            and r.source_entity_name.strip().lower() != r.target_entity_name.strip().lower()
+        ]
+        if clean_rels:
+            rel_draft = {
+                "id": int(time.time() * 1000),
+                "type": "relationships",
+                "title": "New Lore Relationships",
+                "desc": f"Discovered {len(clean_rels)} new relationships in the text.",
+                "context": "GraphRAG Update",
+                "relationships": clean_rels
+            }
+            result.append(rel_draft)
 
     for d in drafts:
         draft_dict = {
@@ -187,6 +195,9 @@ def extract_ambient_lore(narrative_text: str, wiki_index: list) -> List[dict]:
         return []
 
 def generate_chat_response(system_prompt: str, messages: list) -> str:
+    if not messages:
+        return "Please provide a message."
+
     client = get_client()
     if not client:
         return "Error: GEMINI_API_KEY is missing."
@@ -195,16 +206,27 @@ def generate_chat_response(system_prompt: str, messages: list) -> str:
 
     contents = []
     for msg in messages:
-        contents.append(
-            types.Content(
-                role=msg.role,
-                parts=[types.Part.from_text(msg.content)]
+        role = 'model' if getattr(msg, 'role', '') in ['assistant', 'model', 'bot'] else 'user'
+        text_content = getattr(msg, 'content', '') or ""
+        if text_content.strip():
+            contents.append(
+                types.Content(
+                    role=role,
+                    parts=[types.Part.from_text(text=text_content)]
+                )
             )
-        )
+
+    # Google GenAI requires requests to not end on a model turn and must contain at least one user turn
+    while contents and contents[-1].role == 'model':
+        contents.pop()
+
+    has_user_turn = any(c.role == 'user' for c in contents)
+    if not contents or not has_user_turn:
+        return "Please provide a non-empty message."
 
     try:
         response = client.models.generate_content(
-            model='gemini-2.5-flash',
+            model='gemini-3.6-flash',
             contents=contents,
             config=types.GenerateContentConfig(
                 system_instruction=system_prompt,

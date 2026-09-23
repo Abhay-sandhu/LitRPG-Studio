@@ -55,22 +55,30 @@ export const BibleView: React.FC<BibleViewProps> = ({ projectId = 1 }) => {
     })
 
     // Extract unique categories
-    const categories = Array.from(new Set(lore.map(l => l.category).filter(Boolean))).sort()
+    const categories = Array.from(new Set(lore.map(l => (l.category || '').trim()).filter(Boolean))).sort()
 
     const filteredLore = lore.filter(item => {
         const matchesSearch = item.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
                               (item.description || '').toLowerCase().includes(searchTerm.toLowerCase())
-        const matchesCat = selectedCategory ? item.category === selectedCategory : true
+        const matchesCat = selectedCategory ? (item.category || '').toLowerCase() === selectedCategory.toLowerCase() : true
         return matchesSearch && matchesCat
     })
 
     const handleSave = () => {
-        let parsedAttrs = editingEntity?.attributes || {}
-        try {
-            parsedAttrs = JSON.parse(rawAttributes)
-        } catch (e) {
-            alert("Invalid JSON in attributes. Please fix before saving.")
+        const trimmedName = editingEntity?.name?.trim()
+        if (!trimmedName) {
+            alert("Lore entity name cannot be empty.")
             return
+        }
+
+        let parsedAttrs: Record<string, any> = {}
+        if (rawAttributes && rawAttributes.trim()) {
+            try {
+                parsedAttrs = JSON.parse(rawAttributes)
+            } catch (e) {
+                alert("Invalid JSON in attributes. Please fix before saving.")
+                return
+            }
         }
 
         if (typeof parsedAttrs !== 'object' || parsedAttrs === null || Array.isArray(parsedAttrs)) {
@@ -81,7 +89,7 @@ export const BibleView: React.FC<BibleViewProps> = ({ projectId = 1 }) => {
         if (isCreating && editingEntity) {
             createMutation.mutate({
                 project_id: projectId,
-                name: editingEntity.name || 'New Entity',
+                name: trimmedName,
                 category: editingEntity.category || 'Concept',
                 description: editingEntity.description || '',
                 attributes: parsedAttrs,
@@ -91,7 +99,7 @@ export const BibleView: React.FC<BibleViewProps> = ({ projectId = 1 }) => {
             updateMutation.mutate({
                 id: editingEntity.id,
                 data: {
-                    name: editingEntity.name?.trim() || 'Untitled Entity',
+                    name: trimmedName,
                     category: editingEntity.category,
                     description: editingEntity.description,
                     attributes: parsedAttrs,

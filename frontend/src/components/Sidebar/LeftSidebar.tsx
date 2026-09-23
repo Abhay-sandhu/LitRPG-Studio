@@ -32,6 +32,13 @@ interface LeftSidebarProps {
   chapters: ChapterItem[]
   activeChapterId?: number
   onSelectChapter: (id: number) => void
+  onNavigateToBible?: () => void
+}
+
+const countWords = (htmlText?: string): number => {
+  if (!htmlText) return 0
+  const plainText = htmlText.replace(/<[^>]*>/g, ' ').trim()
+  return plainText ? plainText.split(/\s+/).filter(Boolean).length : 0
 }
 
 const ICON_MAP: Record<string, React.FC<any>> = {
@@ -48,6 +55,7 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = React.memo(({
   chapters,
   activeChapterId,
   onSelectChapter,
+  onNavigateToBible,
 }) => {
   const queryClient = useQueryClient()
   const [activeTab, setActiveTab] = useState<'chapters' | 'bible'>('chapters')
@@ -61,13 +69,16 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = React.memo(({
   })
   
   const createChapterMutation = useMutation({
-    mutationFn: (data?: {title?: string, content?: string, order?: number}) => createChapter({ 
-      project_id: projectId, 
-      title: data?.title || 'Untitled Chapter', 
-      content: data?.content || '',
-      words: data?.content ? data.content.split(/\s+/).length : 0, 
-      order: data?.order ?? chapters.length + 1 
-    }),
+    mutationFn: (data?: {title?: string, content?: string, order?: number}) => {
+      const maxOrder = chapters.reduce((max, ch: any) => Math.max(max, ch.order || 0), 0)
+      return createChapter({ 
+        project_id: projectId, 
+        title: data?.title || 'Untitled Chapter', 
+        content: data?.content || '',
+        words: countWords(data?.content), 
+        order: data?.order ?? (maxOrder + 1)
+      })
+    },
     onSuccess: (newChapter) => {
       queryClient.setQueryData(['chapters', projectId], (old: any) => old ? [...old, newChapter] : [newChapter])
       queryClient.invalidateQueries({ queryKey: ['chapters'] })
@@ -85,15 +96,24 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = React.memo(({
     setIsImporting(true)
     try {
       const text = await file.text()
-      // Split by 'Chapter X' or '# Chapter X'
-      const rawChunks = text.split(/(?:^|\n)(?=#?\s*Chapter\s+\d+|#?\s*Prologue)/i)
+      // Split by 'Chapter X', 'Chapter One', 'Chapter IV', 'Act X', 'Prologue', 'Epilogue', etc.
+      let rawChunks = text.split(/(?:^|\n)(?=#?\s*(?:Chapter|Act|Episode)\s+(?:\d+|[IVXLCDM]+|[A-Za-z]+)|#?\s*Prologue|#?\s*Epilogue)/i)
+      let chunks = rawChunks.filter(c => c.trim().length > 0)
       
-      const chunks = rawChunks.filter(c => c.trim().length > 0)
+      // Fallback: If no chapter headings detected, import the entire file as a single chapter
+      if (chunks.length === 0 && text.trim().length > 0) {
+        const fallbackTitle = file.name.replace(/\.[^/.]+$/, "").replace(/[-_]/g, ' ') || 'Imported Manuscript'
+        chunks = [`# ${fallbackTitle}\n` + text]
+      }
       
       if (chunks.length === 0) {
-        alert("No chapters found! Make sure they start with 'Chapter X'.")
+        alert("The uploaded manuscript file is empty.")
         return
       }
+
+      let firstCreatedChapterId: number | null = null
+      const createdChapters: any[] = []
+      const baseOrder = chapters.reduce((max, ch: any) => Math.max(max, ch.order || 0), 0)
 
       for (let i = 0; i < chunks.length; i++) {
         const chunk = chunks[i]
@@ -101,16 +121,32 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = React.memo(({
         const titleLine = lines[0].replace(/#/g, '').trim()
         const content = lines.slice(1).join('\n').trim()
         
-        // Convert basic newlines to paragraphs for TipTap
-        const htmlContent = content.split('\n\n').map(p => `<p>${p.replace(/\n/g, '<br>')}</p>`).join('')
+        // Convert basic newlines to paragraphs for TipTap, escaping special characters
+        const escapeHtml = (str: string) => str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+        const htmlContent = content.split('\n\n').map(p => `<p>${escapeHtml(p).replace(/\n/g, '<br>')}</p>`).join('')
 
-        await createChapterMutation.mutateAsync({
-          title: titleLine || `Chapter ${i + 1}`,
+        const created = await createChapter({
+          project_id: projectId,
+          title: titleLine || `Chapter ${baseOrder + i + 1}`,
           content: htmlContent,
-          order: chapters.length + i + 1
+          words: countWords(htmlContent),
+          order: baseOrder + i + 1
         })
+        if (created) {
+          createdChapters.push(created)
+          if (i === 0) {
+            firstCreatedChapterId = created.id
+          }
+        }
       }
-      alert(`Successfully imported ${chunks.length} chapters!`)
+
+      // Synchronously update TanStack Query cache so App.tsx does not fall back to old chapter
+      queryClient.setQueryData(['chapters', projectId], (old: any) => [...(old || []), ...createdChapters])
+      queryClient.invalidateQueries({ queryKey: ['chapters'] })
+      if (firstCreatedChapterId) {
+        onSelectChapter(firstCreatedChapterId)
+      }
+      alert(`Successfully imported ${chunks.length} chapter${chunks.length > 1 ? 's' : ''}!`)
     } catch (err) {
       console.error(err)
       alert("Error importing manuscript")
@@ -121,6 +157,12 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = React.memo(({
   }
 
   const handleExport = () => {
+    if (chapters.length === 0) {
+      alert("No chapters to export.")
+      return
+    }
+
+    const escapeHtml = (str: string) => str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
     let combinedHtml = `<!DOCTYPE html>
 <html>
 <head>
@@ -130,12 +172,23 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = React.memo(({
   body { font-family: serif; max-width: 800px; margin: 0 auto; padding: 2em; line-height: 1.6; }
   h1 { text-align: center; margin-top: 2em; margin-bottom: 1em; page-break-before: always; }
   p { text-indent: 1.5em; margin-top: 0; margin-bottom: 0; }
+  blockquote, .system-blue-box {
+    border-left: 4px solid #0284c7;
+    background: #f0f9ff;
+    border-radius: 6px;
+    padding: 1em 1.25em;
+    margin: 1.5em 0;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+    color: #0369a1;
+  }
+  blockquote p, .system-blue-box p { text-indent: 0; margin-bottom: 0.5em; }
+  blockquote p:last-child, .system-blue-box p:last-child { margin-bottom: 0; }
 </style>
 </head>
 <body>
 `
     chapters.forEach(ch => {
-      combinedHtml += `\n<h1>${ch.title}</h1>\n`
+      combinedHtml += `\n<h1>${escapeHtml(ch.title)}</h1>\n`
       if (ch.content) {
         combinedHtml += ch.content
       } else {
@@ -149,11 +202,13 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = React.memo(({
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a')
     a.href = url
-    a.download = `Project_Export.html`
+    a.download = `Manuscript_Export.html`
     document.body.appendChild(a)
     a.click()
     document.body.removeChild(a)
-    URL.revokeObjectURL(url)
+    setTimeout(() => {
+      URL.revokeObjectURL(url)
+    }, 1000)
   }
 
   const deleteChapterMutation = useMutation({
@@ -167,6 +222,8 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = React.memo(({
         const remaining = chapters.filter(c => c.id !== deletedId)
         if (remaining.length > 0) {
           onSelectChapter(remaining[0].id)
+        } else {
+          onSelectChapter(0)
         }
       }
     },
@@ -369,8 +426,8 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = React.memo(({
               <button
                 type="button"
                 className="hover:text-sky-600 dark:hover:text-sky-400 transition-colors"
-                title="Add Lore Entry"
-                onClick={() => alert("Create new Lore Entry modal coming soon!")}
+                title="Open Story Bible"
+                onClick={() => onNavigateToBible?.()}
               >
                 <Plus className="w-3.5 h-3.5" />
               </button>
@@ -383,8 +440,9 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = React.memo(({
                 <button
                   key={`${item.id}-${idx}`}
                   type="button"
-                  onClick={() => alert(`View details for: ${item.name}`)}
+                  onClick={() => onNavigateToBible?.()}
                   className="w-full flex items-center justify-between px-2.5 py-1.5 rounded-md text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800/50 cursor-pointer transition-colors"
+                  title="Open in Story Bible"
                 >
                   <div className="flex items-center space-x-2 truncate min-w-0">
                     <Icon className="w-3.5 h-3.5 text-sky-600 dark:text-sky-400 shrink-0" />

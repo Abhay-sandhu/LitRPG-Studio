@@ -19,11 +19,17 @@ const CATEGORY_COLORS: Record<string, string> = {
   Event: '#ef4444', // red-500
 }
 
+const getCategoryColor = (cat?: string): string => {
+  if (!cat) return CATEGORY_COLORS.Concept
+  const key = Object.keys(CATEGORY_COLORS).find(k => k.toLowerCase() === cat.toLowerCase())
+  return key ? CATEGORY_COLORS[key] : CATEGORY_COLORS.Concept
+}
+
 export const ConstellationView: React.FC<ConstellationViewProps> = ({ projectId }) => {
   const containerRef = useRef<HTMLDivElement>(null)
   const [dimensions, setDimensions] = useState({ width: 800, height: 600 })
 
-  const { data: lore = [] } = useQuery({
+  const { data: lore = [], isLoading: isLoadingLore } = useQuery({
     queryKey: ['lore', projectId],
     queryFn: () => fetchLore(projectId)
   })
@@ -34,34 +40,36 @@ export const ConstellationView: React.FC<ConstellationViewProps> = ({ projectId 
   })
 
   useEffect(() => {
-    if (containerRef.current) {
-      const { clientWidth, clientHeight } = containerRef.current
-      setDimensions({ width: clientWidth, height: clientHeight })
-    }
-    
-    const handleResize = () => {
-      if (containerRef.current) {
-        setDimensions({ width: containerRef.current.clientWidth, height: containerRef.current.clientHeight })
+    if (!containerRef.current) return
+    const ro = new ResizeObserver((entries) => {
+      for (const entry of entries) {
+        const { width, height } = entry.contentRect
+        if (width > 0 && height > 0) {
+          setDimensions({ width, height })
+        }
       }
-    }
-    
-    window.addEventListener('resize', handleResize)
-    return () => window.removeEventListener('resize', handleResize)
+    })
+    ro.observe(containerRef.current)
+    return () => ro.disconnect()
   }, [])
 
   const graphData = useMemo(() => {
+    const validNodeIds = new Set(lore.map((e: LoreEntity) => e.id))
+
     const nodes = lore.map((entity: LoreEntity) => ({
       id: entity.id,
       name: entity.name,
       val: 2,
-      color: CATEGORY_COLORS[entity.category] || CATEGORY_COLORS.Concept
+      color: getCategoryColor(entity.category)
     }))
 
-    const links = relationships.map((rel: any) => ({
-      source: rel.source_id,
-      target: rel.target_id,
-      name: rel.relationship_type
-    }))
+    const links = relationships
+      .filter((rel: any) => rel.source_id !== rel.target_id && validNodeIds.has(rel.source_id) && validNodeIds.has(rel.target_id))
+      .map((rel: any) => ({
+        source: rel.source_id,
+        target: rel.target_id,
+        name: rel.relationship_type
+      }))
 
     return { nodes, links }
   }, [lore, relationships])
@@ -80,7 +88,11 @@ export const ConstellationView: React.FC<ConstellationViewProps> = ({ projectId 
         </div>
       </div>
       
-      {graphData.nodes.length > 0 ? (
+      {isLoadingLore ? (
+        <div className="flex-1 flex items-center justify-center text-slate-500">
+          Loading constellation...
+        </div>
+      ) : graphData.nodes.length > 0 ? (
         <ForceGraph2D
           width={dimensions.width}
           height={dimensions.height}
@@ -96,8 +108,9 @@ export const ConstellationView: React.FC<ConstellationViewProps> = ({ projectId 
           backgroundColor="#020617"
         />
       ) : (
-        <div className="flex-1 flex items-center justify-center text-slate-500">
-          Loading constellation...
+        <div className="flex-1 flex flex-col items-center justify-center text-slate-500 gap-2">
+          <p className="text-sm">No lore entities found in this project.</p>
+          <p className="text-xs text-slate-600">Create entries in the Story Bible to visualize your world's constellation graph.</p>
         </div>
       )}
     </div>

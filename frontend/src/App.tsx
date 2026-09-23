@@ -12,7 +12,7 @@ import { ProjectsView } from './components/Views/ProjectsView'
 import { AnalyticsView } from './components/Views/AnalyticsView'
 import { BibleView } from './components/Views/BibleView'
 import { ConstellationView } from './components/Views/ConstellationView'
-import { fetchChapters, updateChapter, triggerTacticalAI, triggerAmbientAI } from './api'
+import { fetchChapters, updateChapter, triggerTacticalAI, triggerAmbientAI, fetchProjects } from './api'
 import './App.css'
 
 export default function App() {
@@ -25,7 +25,31 @@ export default function App() {
   const [navOpen, setNavOpen] = useState(false)
   const [currentView, setCurrentView] = useState<ViewType>('editor')
 
-  const [projectId, setProjectId] = useState<number>(1)
+  const [projectId, setProjectId] = useState<number>(() => {
+    const saved = localStorage.getItem('app_project_id')
+    return saved ? parseInt(saved, 10) : 1
+  })
+
+  useEffect(() => {
+    if (projectId) {
+      localStorage.setItem('app_project_id', projectId.toString())
+    }
+  }, [projectId])
+
+  const { data: allProjects = [] } = useQuery({
+    queryKey: ['projects'],
+    queryFn: fetchProjects
+  })
+
+  // Ensure active projectId exists among available projects
+  useEffect(() => {
+    if (allProjects.length > 0) {
+      const exists = allProjects.some((p: any) => p.id === projectId)
+      if (!exists) {
+        setProjectId(allProjects[0].id)
+      }
+    }
+  }, [allProjects, projectId])
   
   type ThemeType = 'light' | 'dark' | 'system'
   const [theme, setTheme] = useState<ThemeType>(() => {
@@ -65,7 +89,7 @@ export default function App() {
   }, [chapters, activeChapterId])
 
   const activeChapter = chapters.find((c: any) => c.id === activeChapterId)
-  const activeChapterTitle = activeChapter?.title || 'Untitled Chapter'
+  const activeChapterTitle = activeChapter ? (activeChapter.title ?? '') : ''
 
   // Helper to decode HTML entities into clean text for AI inputs
   const unescapeHtml = (html: string): string => {
@@ -86,6 +110,12 @@ export default function App() {
   const queryClient = useQueryClient()
   const titleTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
+  // Reset save status and clean pending title timeout on chapter change
+  useEffect(() => {
+    setSaveStatus('synced')
+    if (titleTimeoutRef.current) clearTimeout(titleTimeoutRef.current)
+  }, [activeChapterId])
+
   const handleTitleChange = useCallback((newTitle: string) => {
     if (!activeChapterId) return
     
@@ -97,9 +127,9 @@ export default function App() {
     
     if (titleTimeoutRef.current) clearTimeout(titleTimeoutRef.current)
     titleTimeoutRef.current = setTimeout(() => {
-      // Background save without invalidating to save an unnecessary network round-trip,
-      // as the optimistic UI update already contains the true state.
-      updateChapter(activeChapterId, { title: newTitle })
+      // Background save with fallback if title was cleared
+      const titleToSave = newTitle.trim() || 'Untitled Chapter'
+      updateChapter(activeChapterId, { title: titleToSave })
         .then(() => {
           setSaveStatus('synced')
         })
@@ -120,6 +150,13 @@ export default function App() {
   const aiDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const processedBlockquotesRef = useRef<Set<string>>(new Set())
   const liveContentRef = useRef<string>("")
+
+  // Reset drafts and cleared AI cache when switching projects to avoid cross-project contamination
+  useEffect(() => {
+    setDrafts([])
+    processedBlockquotesRef.current.clear()
+    if (aiDebounceRef.current) clearTimeout(aiDebounceRef.current)
+  }, [projectId])
 
   const handleContentChangeForAI = useCallback((content: string) => {
     liveContentRef.current = content
@@ -163,7 +200,8 @@ export default function App() {
         if (response.drafts?.length > 0) {
           const stampedDrafts = response.drafts.map((d: any, idx: number) => ({
             ...d,
-            id: Date.now() + idx
+            id: Date.now() + idx,
+            chapter_id: activeChapterId ?? undefined
           }))
           setDrafts(prev => {
             return [...prev, ...stampedDrafts]
@@ -171,6 +209,8 @@ export default function App() {
         }
       } catch (err) {
         console.error("Tactical AI failed:", err)
+        // Release blockquotes from processed set so subsequent typing can retry
+        newBlockquotes.forEach(bq => processedBlockquotesRef.current.delete(bq.fingerprint))
       } finally {
         setIsAnalyzing(false)
       }
@@ -194,7 +234,8 @@ export default function App() {
       if (response.drafts?.length > 0) {
         const stampedDrafts = response.drafts.map((d: any, idx: number) => ({
           ...d,
-          id: Date.now() + idx
+          id: Date.now() + idx,
+          chapter_id: activeChapterId ?? undefined
         }))
         setDrafts(prev => {
           return [...prev, ...stampedDrafts]
@@ -206,7 +247,7 @@ export default function App() {
     } finally {
       setIsAnalyzing(false)
     }
-  }, [activeChapter, projectId])
+  }, [activeChapter, activeChapterId, projectId])
 
   const [zenMode, setZenMode] = useState(false)
 
@@ -236,8 +277,8 @@ export default function App() {
       {!zenMode && (
         <Navbar
           wordCount={wordCount}
-          chapterTitle={currentView === 'editor' ? activeChapterTitle : 'Global Dashboard'}
-          onChangeTitle={currentView === 'editor' ? handleTitleChange : undefined}
+          chapterTitle={currentView === 'editor' ? (activeChapterId ? activeChapterTitle : 'No Chapter Selected') : 'Global Dashboard'}
+          onChangeTitle={currentView === 'editor' && activeChapterId ? handleTitleChange : undefined}
           isAnalyzing={isAnalyzing}
           saveStatus={saveStatus}
           onToggleZenMode={() => setZenMode(true)}
@@ -256,6 +297,7 @@ export default function App() {
             chapters={chapters}
             activeChapterId={activeChapterId ?? undefined}
             onSelectChapter={setActiveChapterId}
+            onNavigateToBible={() => setCurrentView('bible')}
           />
         )}
 
@@ -295,7 +337,16 @@ export default function App() {
         )}
       </div>
 
-      {currentView === 'projects' && <ProjectsView activeProjectId={projectId} onSelectProject={setProjectId} />}
+      {currentView === 'projects' && (
+        <ProjectsView 
+          activeProjectId={projectId} 
+          onSelectProject={setProjectId}
+          onOpenProject={(id) => {
+            setProjectId(id)
+            setCurrentView('editor')
+          }}
+        />
+      )}
       {currentView === 'bible' && <BibleView projectId={projectId} />}
       {currentView === 'constellation' && <ConstellationView projectId={projectId} />}
       {currentView === 'analytics' && <AnalyticsView projectId={projectId} />}
