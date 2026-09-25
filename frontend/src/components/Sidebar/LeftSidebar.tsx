@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+﻿import React, { useState } from 'react'
 import {
   FileText,
   FolderClosed,
@@ -16,7 +16,8 @@ import {
 } from 'lucide-react'
 
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { fetchLore, createChapter, deleteChapter } from '../../api'
+import { fetchLore, createChapter, deleteChapter, fetchChapters } from '../../api'
+import { useStore } from '../../store'
 
 export interface ChapterItem {
   id: number
@@ -26,12 +27,6 @@ export interface ChapterItem {
 }
 
 interface LeftSidebarProps {
-  projectId: number
-  collapsed: boolean
-  onToggleCollapse: () => void
-  chapters: ChapterItem[]
-  activeChapterId?: number
-  onSelectChapter: (id: number) => void
   onNavigateToBible?: () => void
 }
 
@@ -49,15 +44,19 @@ const ICON_MAP: Record<string, React.FC<any>> = {
 }
 
 export const LeftSidebar: React.FC<LeftSidebarProps> = React.memo(({
-  projectId,
-  collapsed,
-  onToggleCollapse,
-  chapters,
-  activeChapterId,
-  onSelectChapter,
   onNavigateToBible,
 }) => {
+  const { projectId, leftCollapsed: collapsed, setLeftCollapsed, activeChapterId, setActiveChapterId, } = useStore()
+  
   const queryClient = useQueryClient()
+  
+  const { data: chapters = [] } = useQuery({
+    queryKey: ['chapters', projectId],
+    queryFn: () => fetchChapters(projectId)
+  })
+
+  const onToggleCollapse = () => setLeftCollapsed(p => !p)
+  const onSelectChapter = setActiveChapterId
   const [activeTab, setActiveTab] = useState<'chapters' | 'bible'>('chapters')
   const [searchQuery, setSearchQuery] = useState('')
   const fileInputRef = React.useRef<HTMLInputElement>(null)
@@ -460,3 +459,4 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = React.memo(({
     </aside>
   )
 })
+

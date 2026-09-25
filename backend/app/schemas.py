@@ -60,6 +60,10 @@ class LoreRelationship(LoreRelationshipBase):
     class Config:
         from_attributes = True
 
+class BulkLoreRelationshipRequest(BaseModel):
+    project_id: int
+    relationships: List[Dict[str, Any]]
+
 class LedgerBase(BaseModel):
     event_name: str
     changes: Dict[str, Any] = Field(default_factory=dict)

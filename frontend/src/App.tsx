@@ -1,34 +1,32 @@
-import { useState, useEffect, useCallback, useRef } from 'react'
-import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { useEffect, useCallback, useRef } from 'react'
+import { useQuery } from '@tanstack/react-query'
 import { Navbar } from './components/Header/Navbar'
 import { LeftSidebar } from './components/Sidebar/LeftSidebar'
 import { TipTapEditor } from './components/Editor/TipTapEditor'
 import { RightInspector } from './components/Inspector/RightInspector'
-import type { DraftItem } from './components/Inspector/RightInspector'
 import { GlobalNav } from './components/Navigation/GlobalNav'
-import type { ViewType } from './components/Navigation/GlobalNav'
 import { SettingsView } from './components/Views/SettingsView'
 import { ProjectsView } from './components/Views/ProjectsView'
 import { AnalyticsView } from './components/Views/AnalyticsView'
 import { BibleView } from './components/Views/BibleView'
 import { ConstellationView } from './components/Views/ConstellationView'
-import { fetchChapters, updateChapter, triggerTacticalAI, triggerAmbientAI, fetchProjects } from './api'
+import { fetchChapters, fetchProjects } from './api'
+import { useStore } from './store'
+import { useStoryAI } from './hooks/useStoryAI'
 import './App.css'
 
 export default function App() {
-  const [leftCollapsed, setLeftCollapsed] = useState(false)
-  const [rightCollapsed, setRightCollapsed] = useState(false)
-  const [wordCount, setWordCount] = useState(0)
-  const [isAnalyzing, setIsAnalyzing] = useState(false)
-
-  // Manage Global Navigation
-  const [navOpen, setNavOpen] = useState(false)
-  const [currentView, setCurrentView] = useState<ViewType>('editor')
-
-  const [projectId, setProjectId] = useState<number>(() => {
-    const saved = localStorage.getItem('app_project_id')
-    return saved ? parseInt(saved, 10) : 1
-  })
+  const {
+    currentView, setCurrentView,
+    navOpen, setNavOpen,
+    rightCollapsed, setRightCollapsed,
+    theme, setTheme,
+    projectId, setProjectId,
+    activeChapterId, setActiveChapterId,
+    setWordCount,
+    zenMode, setZenMode,
+    setSaveStatus
+  } = useStore()
 
   useEffect(() => {
     if (projectId) {
@@ -50,11 +48,6 @@ export default function App() {
       }
     }
   }, [allProjects, projectId])
-  
-  type ThemeType = 'light' | 'dark' | 'system'
-  const [theme, setTheme] = useState<ThemeType>(() => {
-    return (localStorage.getItem('app_theme') as ThemeType) || 'system'
-  })
 
   useEffect(() => {
     const root = window.document.documentElement
@@ -74,8 +67,6 @@ export default function App() {
     queryFn: () => fetchChapters(projectId)
   })
 
-  const [activeChapterId, setActiveChapterId] = useState<number | null>(null)
-
   // Fallback to first chapter if active chapter is deleted or none is active
   useEffect(() => {
     if (chapters.length > 0) {
@@ -89,169 +80,29 @@ export default function App() {
   }, [chapters, activeChapterId])
 
   const activeChapter = chapters.find((c: any) => c.id === activeChapterId)
-  const activeChapterTitle = activeChapter ? (activeChapter.title ?? '') : ''
 
-  // Helper to decode HTML entities into clean text for AI inputs
-  const unescapeHtml = (html: string): string => {
-    const doc = new DOMParser().parseFromString(html, 'text/html')
-    return doc.body.textContent || ""
-  }
+  const { drafts, setDrafts, handleContentChangeForAI, handleScanChapter } = useStoryAI()
 
-  // Sync word count and live content buffer on chapter mount/change (avoiding stale scans)
+  const liveContentRef = useRef<string>('')
+  
+  // Sync word count and live content buffer on chapter mount/change
   useEffect(() => {
     if (activeChapter) {
       setWordCount(activeChapter.words ?? 0)
-      liveContentRef.current = activeChapter.content || ""
+      liveContentRef.current = activeChapter.content || ''
     } else {
-      liveContentRef.current = ""
+      liveContentRef.current = ''
     }
   }, [activeChapterId, activeChapter?.content])
 
-  const queryClient = useQueryClient()
-  const titleTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const toggleRightCollapse = useCallback(() => setRightCollapsed(p => !p), [setRightCollapsed])
+  const openNav = useCallback(() => setNavOpen(true), [setNavOpen])
+  const closeNav = useCallback(() => setNavOpen(false), [setNavOpen])
 
-  // Reset save status and clean pending title timeout on chapter change
-  useEffect(() => {
-    setSaveStatus('synced')
-    if (titleTimeoutRef.current) clearTimeout(titleTimeoutRef.current)
-  }, [activeChapterId])
+  const onScanChapterClick = useCallback(() => {
+    handleScanChapter(activeChapter?.content)
+  }, [handleScanChapter, activeChapter])
 
-  const handleTitleChange = useCallback((newTitle: string) => {
-    if (!activeChapterId) return
-    
-    // Optimistic UI update for instant typing feel
-    queryClient.setQueryData(['chapters', projectId], (old: any) => 
-      old?.map((c: any) => c.id === activeChapterId ? { ...c, title: newTitle } : c)
-    )
-    setSaveStatus('saving')
-    
-    if (titleTimeoutRef.current) clearTimeout(titleTimeoutRef.current)
-    titleTimeoutRef.current = setTimeout(() => {
-      // Background save with fallback if title was cleared
-      const titleToSave = newTitle.trim() || 'Untitled Chapter'
-      updateChapter(activeChapterId, { title: titleToSave })
-        .then(() => {
-          setSaveStatus('synced')
-        })
-        .catch(() => {
-          setSaveStatus('error')
-        })
-    }, 500)
-  }, [activeChapterId, queryClient, projectId])
-
-  // Stable callbacks for memoized child components to prevent re-renders on keystrokes
-  const toggleLeftCollapse = useCallback(() => setLeftCollapsed(p => !p), [])
-  const toggleRightCollapse = useCallback(() => setRightCollapsed(p => !p), [])
-  const openNav = useCallback(() => setNavOpen(true), [])
-  const closeNav = useCallback(() => setNavOpen(false), [])
-
-  // AI Pipeline State
-  const [drafts, setDrafts] = useState<DraftItem[]>([])
-  const aiDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const processedBlockquotesRef = useRef<Set<string>>(new Set())
-  const liveContentRef = useRef<string>("")
-
-  // Reset drafts and cleared AI cache when switching projects to avoid cross-project contamination
-  useEffect(() => {
-    setDrafts([])
-    processedBlockquotesRef.current.clear()
-    if (aiDebounceRef.current) clearTimeout(aiDebounceRef.current)
-  }, [projectId])
-
-  const handleContentChangeForAI = useCallback((content: string) => {
-    liveContentRef.current = content
-    
-    // Extract blockquotes
-    const blockquoteMatches = Array.from(content.matchAll(/<blockquote[^>]*>([\s\S]*?)<\/blockquote>/gi))
-    if (blockquoteMatches.length === 0) return
-    
-    // Check if there are any new blockquotes we haven't processed yet
-    const newBlockquotes = blockquoteMatches
-      .map((m) => {
-        const text = unescapeHtml(m[1]).trim()
-        const fingerprint = `${activeChapterId}:${text}`
-        return { text, fingerprint }
-      })
-      .filter(item => item.text.length > 0 && !processedBlockquotesRef.current.has(item.fingerprint))
-
-    if (newBlockquotes.length === 0) return
-
-    if (aiDebounceRef.current) clearTimeout(aiDebounceRef.current)
-    
-    // Wait 7 seconds after typing stops before hitting Tactical AI
-    aiDebounceRef.current = setTimeout(async () => {
-      try {
-        setIsAnalyzing(true)
-        
-        // Mark these blockquotes as processed immediately so we don't double-fire
-        newBlockquotes.forEach(bq => processedBlockquotesRef.current.add(bq.fingerprint))
-        
-        // Strip HTML tags and decode entities down to plain text for the context
-        const rawStripped = content.replace(/<(?!\/?blockquote\b)[^>]+>/gi, '\n')
-        const cleanedContext = unescapeHtml(rawStripped)
-        // Send only the new blockquotes as the system box text
-        const systemBoxText = newBlockquotes.map(bq => bq.text).join('\n---\n')
-        
-        const response = await triggerTacticalAI({
-          system_box_text: systemBoxText,
-          surrounding_text: cleanedContext,
-          project_id: projectId
-        })
-        if (response.drafts?.length > 0) {
-          const stampedDrafts = response.drafts.map((d: any, idx: number) => ({
-            ...d,
-            id: Date.now() + idx,
-            chapter_id: activeChapterId ?? undefined
-          }))
-          setDrafts(prev => {
-            return [...prev, ...stampedDrafts]
-          })
-        }
-      } catch (err) {
-        console.error("Tactical AI failed:", err)
-        // Release blockquotes from processed set so subsequent typing can retry
-        newBlockquotes.forEach(bq => processedBlockquotesRef.current.delete(bq.fingerprint))
-      } finally {
-        setIsAnalyzing(false)
-      }
-    }, 7000)
-  }, [projectId, activeChapterId])
-
-  const handleScanChapter = useCallback(async () => {
-    if (!activeChapter) return
-    try {
-      setIsAnalyzing(true)
-      
-      const contentToScan = liveContentRef.current || activeChapter.content
-      // Strip HTML tags and decode HTML entities down to plain text before sending to AI
-      const rawStripped = contentToScan.replace(/<(?!\/?blockquote\b)[^>]+>/gi, '\n')
-      const cleanedText = unescapeHtml(rawStripped)
-      
-      const response = await triggerAmbientAI({
-        narrative_text: cleanedText,
-        project_id: projectId
-      })
-      if (response.drafts?.length > 0) {
-        const stampedDrafts = response.drafts.map((d: any, idx: number) => ({
-          ...d,
-          id: Date.now() + idx,
-          chapter_id: activeChapterId ?? undefined
-        }))
-        setDrafts(prev => {
-          return [...prev, ...stampedDrafts]
-        })
-        setRightCollapsed(false) // Open right sidebar if there's results
-      }
-    } catch (err) {
-      console.error("Ambient AI failed:", err)
-    } finally {
-      setIsAnalyzing(false)
-    }
-  }, [activeChapter, activeChapterId, projectId])
-
-  const [zenMode, setZenMode] = useState(false)
-
-  // Keyboard shortcut for exiting Zen Mode
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape' && zenMode) {
@@ -261,8 +112,6 @@ export default function App() {
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
   }, [zenMode])
-
-  const [saveStatus, setSaveStatus] = useState<'synced' | 'saving' | 'error'>('synced')
 
   return (
     <div className="h-screen w-screen flex flex-col overflow-hidden font-sans bg-slate-50 text-slate-900 dark:bg-slate-950 dark:text-slate-100 transition-colors duration-200">
@@ -276,12 +125,6 @@ export default function App() {
       {/* Top Navbar */}
       {!zenMode && (
         <Navbar
-          wordCount={wordCount}
-          chapterTitle={currentView === 'editor' ? (activeChapterId ? activeChapterTitle : 'No Chapter Selected') : 'Global Dashboard'}
-          onChangeTitle={currentView === 'editor' && activeChapterId ? handleTitleChange : undefined}
-          isAnalyzing={isAnalyzing}
-          saveStatus={saveStatus}
-          onToggleZenMode={() => setZenMode(true)}
           onOpenNav={openNav}
         />
       )}
@@ -291,12 +134,6 @@ export default function App() {
         {/* Left Sidebar: Chapters & Local Story Bible */}
         {!zenMode && (
           <LeftSidebar
-            projectId={projectId}
-            collapsed={leftCollapsed}
-            onToggleCollapse={toggleLeftCollapse}
-            chapters={chapters}
-            activeChapterId={activeChapterId ?? undefined}
-            onSelectChapter={setActiveChapterId}
             onNavigateToBible={() => setCurrentView('bible')}
           />
         )}
@@ -331,7 +168,7 @@ export default function App() {
             projectId={projectId}
             drafts={drafts}
             setDrafts={setDrafts}
-            onScanChapter={handleScanChapter}
+            onScanChapter={onScanChapterClick}
             activeChapterId={activeChapterId ?? undefined}
           />
         )}
@@ -354,3 +191,6 @@ export default function App() {
     </div>
   )
 }
+
+
+

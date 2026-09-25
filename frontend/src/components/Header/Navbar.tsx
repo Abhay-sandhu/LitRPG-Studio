@@ -1,17 +1,50 @@
 import React from 'react'
 import { BookOpen, Sparkles, CheckCircle2, Menu, Maximize } from 'lucide-react'
 
+import { useStore } from '../../store'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { fetchChapters, updateChapter } from '../../api'
+
 interface NavbarProps {
-  wordCount: number
-  chapterTitle: string
-  isAnalyzing: boolean
-  saveStatus: 'synced' | 'saving' | 'error'
-  onChangeTitle?: (newTitle: string) => void
-  onToggleZenMode: () => void
   onOpenNav: () => void
 }
 
-export const Navbar: React.FC<NavbarProps> = React.memo(({ wordCount, chapterTitle, isAnalyzing, saveStatus, onChangeTitle, onToggleZenMode, onOpenNav }) => {
+export const Navbar: React.FC<NavbarProps> = React.memo(({ onOpenNav }) => {
+  const { 
+    wordCount, 
+    isAnalyzing, 
+    saveStatus, 
+    setSaveStatus,
+    setZenMode,
+    projectId,
+    activeChapterId,
+    currentView
+  } = useStore()
+
+  const queryClient = useQueryClient()
+  const { data: chapters = [] } = useQuery({
+    queryKey: ['chapters', projectId],
+    queryFn: () => fetchChapters(projectId)
+  })
+
+  const activeChapter = chapters.find((c: any) => c.id === activeChapterId)
+  const chapterTitle = currentView === 'editor' ? (activeChapterId && activeChapter ? (activeChapter.title ?? '') : 'No Chapter Selected') : 'Global Dashboard'
+
+  const onChangeTitle = currentView === 'editor' && activeChapterId ? (newTitle: string) => {
+    queryClient.setQueryData(['chapters', projectId], (old: any) => 
+      old?.map((c: any) => c.id === activeChapterId ? { ...c, title: newTitle } : c)
+    )
+    setSaveStatus('saving')
+    
+    // Simple inline debounce
+    setTimeout(() => {
+      const titleToSave = newTitle.trim() || 'Untitled Chapter'
+      updateChapter(activeChapterId, { title: titleToSave })
+        .then(() => setSaveStatus('synced'))
+        .catch(() => setSaveStatus('error'))
+    }, 500)
+  } : undefined
+
   return (
     <header className="h-14 border-b border-slate-200 dark:border-slate-800 bg-white/90 dark:bg-slate-900/90 backdrop-blur px-4 flex items-center justify-between select-none z-10 transition-colors">
       <div className="flex items-center space-x-3">
@@ -74,7 +107,7 @@ export const Navbar: React.FC<NavbarProps> = React.memo(({ wordCount, chapterTit
         )}
         
         <button 
-          onClick={onToggleZenMode}
+          onClick={() => setZenMode(true)}
           className="p-1.5 rounded-md text-slate-500 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800 transition-colors"
           title="Enter Zen Mode (Focus Mode)"
         >
