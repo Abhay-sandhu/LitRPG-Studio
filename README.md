@@ -17,7 +17,7 @@ Traditional word processors don't understand character stats, system boxes, or s
 
 ChronicleRPG is built for speed and complete local control:
 
-- **Frontend**: React + Vite + TypeScript. Uses **Zustand** for global state management and **TanStack Query** for caching and data fetching. Styled with TailwindCSS.
+- **Frontend**: React + Vite + TypeScript. Uses Zustand for global state management and TanStack Query for caching and data fetching. Styled with TailwindCSS.
 - **Backend**: FastAPI (Python) serving a fully asynchronous REST API.
 - **Database**: Local SQLite database via SQLAlchemy (`aiosqlite`), utilizing a clean Repository Pattern (`crud.py`) for maintainability.
 - **AI Integration**: Powered by Google's Gemini AI, utilizing strict JSON Structured Outputs (`response_schema`) for deterministic data extraction.
@@ -66,9 +66,3 @@ ChronicleRPG is built for speed and complete local control:
    ```bash
    npm run dev
    ```
-
-## 🛠️ Tech Debt & Design Philosophy
-
-ChronicleRPG strictly adheres to modern React idioms. We have intentionally stripped out all "prop-drilling" in favor of Zustand stores. The backend routes are cleanly decoupled into a generic HTTP router (`main.py`) and a database transaction repository (`crud.py`).
-
-*Write the progression fantasy you've always wanted to read.*
